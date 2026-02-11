@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { spawn, exec } = require('child_process');
+const logger = require('./logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,6 +37,9 @@ app.get('/', (req, res) => {
     // Generate a list of existing files in the downloads folder
     let filesHtml = '';
     try {
+        if (!fs.existsSync(DOWNLOAD_DIR)) {
+            fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+        }
         const files = fs.readdirSync(DOWNLOAD_DIR);
         if (files.length > 0) {
             filesHtml = '<ul class="list-group">' + 
@@ -101,7 +105,10 @@ app.get('/', (req, res) => {
                     <div class="card-body">
                         <h5 class="card-title mb-3">2. Manage & Run</h5>
                         <div class="mb-3">
-                            <label class="form-label text-muted text-uppercase fw-bold" style="font-size: 12px;">Files in Queue</label>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label text-muted text-uppercase fw-bold m-0" style="font-size: 12px;">Files in Queue</label>
+                                <button class="btn btn-sm btn-outline-danger py-0" onclick="clearDownloads()" style="font-size: 12px;">🗑 Delete All</button>
+                            </div>
                             ${filesHtml}
                         </div>
                         
@@ -129,7 +136,10 @@ app.get('/', (req, res) => {
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="card-title m-0">Live Logs</h5>
-                            <a href="/log" target="_blank" class="btn btn-sm btn-outline-secondary">Open in New Tab</a>
+                            <div>
+                                <button class="btn btn-sm btn-outline-danger me-2" onclick="clearLogs()">🗑 Clear Logs</button>
+                                <a href="/log" target="_blank" class="btn btn-sm btn-outline-secondary">Open in New Tab</a>
+                            </div>
                         </div>
                         <iframe src="/log" class="log-frame" id="logFrame"></iframe>
                     </div>
@@ -192,6 +202,32 @@ app.get('/', (req, res) => {
                 // The polling loop will detect the stop message in logs and update UI
             } catch (error) {
                 alert('Error stopping: ' + error);
+            }
+        }
+
+        async function clearLogs() {
+            if (!confirm('Are you sure you want to clear the logs?')) return;
+            try {
+                await fetch('/clear-logs', { method: 'POST' });
+                document.getElementById('logFrame').src = document.getElementById('logFrame').src;
+                
+                // Reset progress bar
+                const bar = document.getElementById('progressBar');
+                bar.style.width = '0%';
+                bar.innerText = '0%';
+                document.getElementById('progressText').innerText = 'Logs cleared.';
+            } catch (error) {
+                alert('Error clearing logs: ' + error);
+            }
+        }
+
+        async function clearDownloads() {
+            if (!confirm('Are you sure you want to delete all files in the downloads folder?')) return;
+            try {
+                await fetch('/clear-downloads', { method: 'POST' });
+                window.location.reload();
+            } catch (error) {
+                alert('Error clearing downloads: ' + error);
             }
         }
 
@@ -286,6 +322,27 @@ app.post('/stop', (req, res) => {
         res.json({ status: 'stopped', message: 'Automation process stopped.' });
     } else {
         res.json({ status: 'ignored', message: 'No active process to stop.' });
+    }
+});
+
+// Route: Clear Logs
+app.post('/clear-logs', (req, res) => {
+    logger.init();
+    res.json({ status: 'cleared', message: 'Logs cleared.' });
+});
+
+// Route: Clear Downloads
+app.post('/clear-downloads', (req, res) => {
+    try {
+        if (fs.existsSync(DOWNLOAD_DIR)) {
+            const files = fs.readdirSync(DOWNLOAD_DIR);
+            for (const file of files) {
+                fs.unlinkSync(path.join(DOWNLOAD_DIR, file));
+            }
+        }
+        res.json({ status: 'cleared', message: 'Downloads folder cleared.' });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: error.message });
     }
 });
 

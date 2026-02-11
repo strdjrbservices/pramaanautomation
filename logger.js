@@ -35,6 +35,11 @@ module.exports = {
         .log-error { color: #f44336; font-weight: bold; }
         .log-success { color: #4caf50; font-weight: bold; }
     </style>
+    <script>
+        window.onload = function() {
+            window.scrollTo(0, document.body.scrollHeight);
+        };
+    </script>
 </head>
 <body>
     <h1>Automation Run Log</h1>

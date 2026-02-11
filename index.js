@@ -190,7 +190,7 @@ async function processWebsiteB(browser, pdfFilePath, isFirstRun = false) {
     const browserClient = await browser.target().createCDPSession();
     await browserClient.send('Browser.setDownloadBehavior', {
         behavior: 'allow',
-        downloadPath: path.resolve(__dirname),
+        downloadPath: DOWNLOAD_PATH,
         eventsEnabled: true,
     });
 
@@ -337,7 +337,7 @@ async function processWebsiteB(browser, pdfFilePath, isFirstRun = false) {
         logger.init();
         logger.log('Launching browser...');
         browser = await puppeteer.launch({
-            headless: true,
+            headless: false,
             slowMo: 10,
             protocolTimeout: 600000,
             args: [
