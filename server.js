@@ -172,8 +172,11 @@ app.get('/', (req, res) => {
                             <button id="runBtn" class="btn btn-success btn-lg flex-grow-1" onclick="runAutomation()">
                                 ▶ Run Automation
                             </button>
-                            <button id="stopBtn" class="btn btn-danger btn-lg flex-grow-1" onclick="stopAutomation()" disabled>
+                            <button id="stopBtn" class="btn btn-danger btn-lg flex-grow-1" onclick="stopAutomation()">
                                 ⏹ Stop
+                            </button>
+                            <button id="killBtn" class="btn btn-dark btn-lg flex-grow-1" onclick="killAllProcesses()">
+                                ☠ Kill All
                             </button>
                         </div>
                     </div>
@@ -226,7 +229,7 @@ app.get('/', (req, res) => {
             const btn = document.getElementById('runBtn');
             const stopBtn = document.getElementById('stopBtn');
             btn.disabled = true;
-            stopBtn.disabled = false;
+            // stopBtn.disabled = false;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Running...';
             
             // Reset progress bar
@@ -254,7 +257,7 @@ app.get('/', (req, res) => {
             } catch (error) {
                 alert('Error starting automation: ' + error);
                 btn.disabled = false;
-                stopBtn.disabled = true;
+                // stopBtn.disabled = true;
                 btn.innerHTML = '▶ Run Automation';
             }
             
@@ -271,6 +274,25 @@ app.get('/', (req, res) => {
                 // The polling loop will detect the stop message in logs and update UI
             } catch (error) {
                 alert('Error stopping: ' + error);
+            }
+        }
+
+        async function killAllProcesses() {
+            if (!confirm('Are you sure you want to kill all processes?')) return;
+            try {
+                await fetch('/kill-all', { method: 'POST' });
+                const bar = document.getElementById('progressBar');
+                const btn = document.getElementById('runBtn');
+                
+                bar.style.width = '0%';
+                bar.innerText = '0%';
+                bar.classList.remove('progress-bar-animated', 'bg-success', 'bg-danger');
+                document.getElementById('progressText').innerText = 'Processes killed.';
+                
+                btn.disabled = false;
+                btn.innerHTML = '▶ Run Automation';
+            } catch (error) {
+                alert('Error killing processes: ' + error);
             }
         }
 
@@ -367,7 +389,7 @@ app.get('/', (req, res) => {
                         else bar.classList.add('bg-success');
                         
                         btn.disabled = false;
-                        stopBtn.disabled = true;
+                        // stopBtn.disabled = true;
                         btn.innerHTML = '▶ Run Automation';
                     }
                 } catch (e) {
@@ -452,6 +474,31 @@ app.post('/stop', (req, res) => {
     } else {
         res.json({ status: 'ignored', message: 'No active process to stop.' });
     }
+});
+
+// Route: Kill All Processes
+app.post('/kill-all', (req, res) => {
+    if (activeChildProcess) {
+        if (process.platform === 'win32') {
+            exec(`taskkill /pid ${activeChildProcess.pid} /T /F`, () => {});
+        } else {
+            activeChildProcess.kill();
+        }
+        activeChildProcess = null;
+    }
+    
+    // Kill orphaned node processes running index.js to ensure automation stops completely
+    if (process.platform === 'win32') {
+        exec('wmic process where "name=\'node.exe\' and commandline like \'%index.js%\'" call terminate', () => {});
+    } else {
+        exec('pkill -f "node index.js"', () => {});
+    }
+
+    try {
+        fs.appendFileSync(LOG_FILE_PATH, `<div class="log log-error">[${new Date().toISOString()}] ☠ Kill All Processes triggered.</div>\n`);
+    } catch (e) {}
+    
+    res.json({ status: 'killed', message: 'Processes killed and state reset.' });
 });
 
 // Route: Clear Logs

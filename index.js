@@ -37,12 +37,16 @@ const DOWNLOAD_PATH = path.resolve(__dirname, 'downloads');
 const waitForDownload = (browserClient, expectedFileType, timeoutMs = 180000) => {
     logger.log(`Waiting for ${expectedFileType} download to complete...`);
     return new Promise((resolve, reject) => {
+        let bytesReceived = 0;
         const timeout = setTimeout(() => {
             browserClient.off('Browser.downloadProgress', onProgress);
-            reject(new Error(`Timeout waiting for ${expectedFileType} download to complete.`));
+            reject(new Error(`Timeout waiting for ${expectedFileType} download to complete. Bytes received: ${bytesReceived}`));
         }, timeoutMs);
 
         const onProgress = (event) => {
+            if (event.state === 'inProgress') {
+                bytesReceived = event.receivedBytes;
+            }
             if (event.state === 'completed') {
                 logger.log(`${expectedFileType} download completed: ${event.guid}`);
                 clearTimeout(timeout);
@@ -312,7 +316,7 @@ async function processWebsiteB(browser, pdfFilePath, isFirstRun = false) {
     // logger.success(`Final PDF successfully stored at: ${finalPdfPath}`);
 
     const generateErrorLogButtonSelector = "::-p-xpath(//button[contains(., 'Log')])";
-    const errorLogDownloadPromise = waitForDownload(browserClient, 'LOG');
+    const errorLogDownloadPromise = waitForDownload(browserClient, 'LOG', TIMEOUTS.LONG);
     await waitAndClick(page, generateErrorLogButtonSelector, "LOG");
     const tempErrorLogPath = await errorLogDownloadPromise;
 
@@ -374,6 +378,14 @@ async function processWebsiteB(browser, pdfFilePath, isFirstRun = false) {
             await processWebsiteB(browser, pdfFilePath, isFirstRun);
             isFirstRun = false;
             logger.success(`--- Finished workflow for: ${pdfFile} ---`);
+
+            const oldFilesDir = path.join(DOWNLOAD_PATH, 'oldfiles');
+            if (!fs.existsSync(oldFilesDir)) {
+                fs.mkdirSync(oldFilesDir, { recursive: true });
+            }
+            const destinationPath = path.join(oldFilesDir, pdfFile);
+            fs.renameSync(pdfFilePath, destinationPath);
+            logger.log(`Moved processed file to: ${destinationPath}`);
         }
 
         logger.success('\n✅ All files processed successfully!');
