@@ -314,7 +314,15 @@ async function processWebsiteB(browser, pdfFilePath, isFirstRun = false) {
     const generateErrorLogButtonSelector = "::-p-xpath(//button[contains(., 'Log')])";
     const errorLogDownloadPromise = waitForDownload(browserClient, 'LOG');
     await waitAndClick(page, generateErrorLogButtonSelector, "LOG");
-    const errorLogPath = await errorLogDownloadPromise;
+    const tempErrorLogPath = await errorLogDownloadPromise;
+
+    const logFilesDir = path.join(DOWNLOAD_PATH, 'logfiles');
+    if (!fs.existsSync(logFilesDir)) {
+        fs.mkdirSync(logFilesDir, { recursive: true });
+    }
+    const errorLogPath = path.join(logFilesDir, path.basename(tempErrorLogPath));
+    fs.renameSync(tempErrorLogPath, errorLogPath);
+
     logger.success(`Error Log successfully stored at: ${errorLogPath}`);
 
     const generateSAVEButtonSelector = "::-p-xpath(//button[contains(., 'Save')])";
@@ -335,9 +343,10 @@ async function processWebsiteB(browser, pdfFilePath, isFirstRun = false) {
     let browser;
     try {
         logger.init();
-        logger.log('Launching browser...');
+        const headlessMode = process.env.PUPPETEER_HEADLESS === 'true';
+        logger.log(`Launching browser... (Headless Mode: ${headlessMode})`);
         browser = await puppeteer.launch({
-            headless: false,
+            headless: headlessMode,
             slowMo: 10,
             protocolTimeout: 600000,
             args: [

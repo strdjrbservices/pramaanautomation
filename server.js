@@ -6,10 +6,12 @@ const { spawn, exec } = require('child_process');
 const logger = require('./logger');
 
 const app = express();
+app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // Define paths based on your project structure
 const DOWNLOAD_DIR = path.resolve(__dirname, 'downloads');
+const LOGFILES_DIR = path.join(DOWNLOAD_DIR, 'logfiles');
 const LOG_FILE_PATH = path.resolve(__dirname, 'run-log.html');
 
 let activeChildProcess = null;
@@ -25,36 +27,72 @@ const storage = multer.diskStorage({
         cb(null, DOWNLOAD_DIR);
     },
     filename: (req, file, cb) => {
-        // Save using the original file name
-        cb(null, file.originalname);
+        // Save using the original file name with timestamp to prevent overwriting
+        const timestamp = Date.now();
+        const ext = path.extname(file.originalname);
+        const name = path.basename(file.originalname, ext);
+        cb(null, `${name}_${timestamp}${ext}`);
     }
 });
 
 const upload = multer({ storage: storage });
 
-// Route: Serve the UI
-app.get('/', (req, res) => {
-    // Generate a list of existing files in the downloads folder
-    let filesHtml = '';
+function getFilesHtml() {
     try {
         if (!fs.existsSync(DOWNLOAD_DIR)) {
             fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
         }
-        const files = fs.readdirSync(DOWNLOAD_DIR);
+        const files = fs.readdirSync(DOWNLOAD_DIR).filter(f => {
+            try { return fs.statSync(path.join(DOWNLOAD_DIR, f)).isFile(); } catch { return false; }
+        });
         if (files.length > 0) {
-            filesHtml = '<ul class="list-group">' + 
+            return '<ul class="list-group">' + 
                 files.map(f => `
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         <span>📄 ${f}</span>
-                        <span class="badge bg-primary rounded-pill">Ready</span>
+                        <div>
+                            <a href="/files/${f}" target="_blank" class="btn btn-sm btn-outline-primary me-2">👁 Preview</a>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteFile('${f}')">🗑</button>
+                        </div>
                     </li>`).join('') + 
                 '</ul>';
         } else {
-            filesHtml = '<div class="alert alert-light text-center" role="alert">No files found in downloads folder.</div>';
+            return '<div class="alert alert-light text-center" role="alert">No files found in downloads folder.</div>';
         }
     } catch (err) {
-        filesHtml = '<div class="alert alert-danger" role="alert">Error reading downloads directory.</div>';
+        return '<div class="alert alert-danger" role="alert">Error reading downloads directory.</div>';
     }
+}
+
+function getLogFilesHtml() {
+    try {
+        if (!fs.existsSync(LOGFILES_DIR)) {
+            fs.mkdirSync(LOGFILES_DIR, { recursive: true });
+        }
+        const logFiles = fs.readdirSync(LOGFILES_DIR);
+        if (logFiles.length > 0) {
+            return '<ul class="list-group">' + 
+                logFiles.map(f => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>📄 ${f}</span>
+                        <div>
+                            <a href="/logfiles/${f}" target="_blank" class="btn btn-sm btn-outline-primary me-2">👁 Preview</a>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteLogFile('${f}')">🗑</button>
+                        </div>
+                    </li>`).join('') + 
+                '</ul>';
+        } else {
+            return '<div class="alert alert-light text-center" role="alert">No log files found.</div>';
+        }
+    } catch (err) {
+        return '<div class="alert alert-danger" role="alert">Error reading logfiles directory.</div>';
+    }
+}
+
+// Route: Serve the UI
+app.get('/', (req, res) => {
+    const filesHtml = getFilesHtml();
+    const logFilesHtml = getLogFilesHtml();
 
     // Return the HTML page
     res.send(`
@@ -109,15 +147,25 @@ app.get('/', (req, res) => {
                                 <label class="form-label text-muted text-uppercase fw-bold m-0" style="font-size: 12px;">Files in Queue</label>
                                 <button class="btn btn-sm btn-outline-danger py-0" onclick="clearDownloads()" style="font-size: 12px;">🗑 Delete All</button>
                             </div>
-                            ${filesHtml}
+                            <div id="filesListContainer">${filesHtml}</div>
                         </div>
                         
+                        <div class="mb-3">
+                            <label class="form-label text-muted text-uppercase fw-bold" style="font-size: 12px;">Generated Log Files</label>
+                            <div id="logFilesListContainer">${logFilesHtml}</div>
+                        </div>
+
                         <div class="mb-4">
                             <label class="form-label text-muted text-uppercase fw-bold" style="font-size: 12px;">Automation Progress</label>
                             <div class="progress" style="height: 25px;">
                                 <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
                             </div>
                             <small id="progressText" class="text-muted d-block text-center mt-1">Ready to start</small>
+                        </div>
+
+                        <div class="form-check form-switch mb-3 d-flex justify-content-center">
+                            <input class="form-check-input me-2" type="checkbox" id="headlessCheckbox">
+                            <label class="form-check-label" for="headlessCheckbox">Run in Background (Headless)</label>
                         </div>
 
                         <div class="d-grid gap-2 d-md-flex justify-content-md-center">
@@ -137,6 +185,7 @@ app.get('/', (req, res) => {
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="card-title m-0">Live Logs</h5>
                             <div>
+                                <button id="toggleLogsBtn" class="btn btn-sm btn-primary me-2" onclick="toggleLogs()">Hide Logs</button>
                                 <button class="btn btn-sm btn-outline-danger me-2" onclick="clearLogs()">🗑 Clear Logs</button>
                                 <a href="/log" target="_blank" class="btn btn-sm btn-outline-secondary">Open in New Tab</a>
                             </div>
@@ -157,6 +206,21 @@ app.get('/', (req, res) => {
         }
 
         let progressInterval;
+        let fileRefreshInterval;
+
+        // Start polling for file updates immediately
+        startFilePolling();
+
+        function startFilePolling() {
+            fileRefreshInterval = setInterval(refreshFileLists, 3000);
+        }
+
+        async function refreshFileLists() {
+            const response = await fetch('/refresh-files');
+            const data = await response.json();
+            document.getElementById('filesListContainer').innerHTML = data.filesHtml;
+            document.getElementById('logFilesListContainer').innerHTML = data.logFilesHtml;
+        }
 
         async function runAutomation() {
             const btn = document.getElementById('runBtn');
@@ -175,7 +239,12 @@ app.get('/', (req, res) => {
             text.innerText = 'Initializing...';
 
             try {
-                const response = await fetch('/run', { method: 'POST' });
+                const headless = document.getElementById('headlessCheckbox').checked;
+                const response = await fetch('/run', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ headless })
+                });
                 const data = await response.json();
                 if (data.status === 'error') {
                     throw new Error(data.message);
@@ -225,9 +294,53 @@ app.get('/', (req, res) => {
             if (!confirm('Are you sure you want to delete all files in the downloads folder?')) return;
             try {
                 await fetch('/clear-downloads', { method: 'POST' });
-                window.location.reload();
+                refreshFileLists();
             } catch (error) {
                 alert('Error clearing downloads: ' + error);
+            }
+        }
+
+        async function deleteFile(filename) {
+            if (!confirm('Are you sure you want to delete ' + filename + '?')) return;
+            try {
+                const response = await fetch('/delete/' + encodeURIComponent(filename), { method: 'POST' });
+                const data = await response.json();
+                if (data.status === 'deleted') {
+                    refreshFileLists();
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                alert('Error deleting file: ' + error);
+            }
+        }
+
+        async function deleteLogFile(filename) {
+            if (!confirm('Are you sure you want to delete ' + filename + '?')) return;
+            try {
+                const response = await fetch('/delete-logfile/' + encodeURIComponent(filename), { method: 'POST' });
+                const data = await response.json();
+                if (data.status === 'deleted') {
+                    refreshFileLists();
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                alert('Error deleting file: ' + error);
+            }
+        }
+
+        function toggleLogs() {
+            const frame = document.getElementById('logFrame');
+            const btn = document.getElementById('toggleLogsBtn');
+            if (frame.style.display === 'none') {
+                frame.style.display = 'block';
+                btn.innerText = 'Hide Logs';
+                btn.className = 'btn btn-sm btn-primary me-2';
+            } else {
+                frame.style.display = 'none';
+                btn.innerText = 'Show Logs';
+                btn.className = 'btn btn-sm btn-outline-primary me-2';
             }
         }
 
@@ -277,13 +390,29 @@ app.post('/upload', upload.single('file'), (req, res) => {
     res.redirect('/');
 });
 
+// Route: Refresh File Lists
+app.get('/refresh-files', (req, res) => {
+    res.json({
+        filesHtml: getFilesHtml(),
+        logFilesHtml: getLogFilesHtml()
+    });
+});
+
 // Route: Trigger Automation
 app.post('/run', (req, res) => {
+    console.log('▶ Run request received. Body:', req.body);
+
     if (activeChildProcess) {
         return res.status(400).json({ status: 'error', message: 'Automation is already running.' });
     }
 
-    const child = spawn('node', ['index.js'], { cwd: __dirname });
+    const headless = (req.body && req.body.headless) ? 'true' : 'false';
+    console.log(`🚀 Spawning process with PUPPETEER_HEADLESS=${headless}`);
+
+    const child = spawn('node', ['index.js'], { 
+        cwd: __dirname,
+        env: { ...process.env, PUPPETEER_HEADLESS: headless }
+    });
     activeChildProcess = child;
 
     child.stdout.on('data', (data) => {
@@ -343,6 +472,60 @@ app.post('/clear-downloads', (req, res) => {
         res.json({ status: 'cleared', message: 'Downloads folder cleared.' });
     } catch (error) {
         res.status(500).json({ status: 'error', message: error.message });
+    }
+});
+
+// Route: Delete Single File
+app.post('/delete/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filepath = path.join(DOWNLOAD_DIR, filename);
+    try {
+        if (fs.existsSync(filepath)) {
+            fs.unlinkSync(filepath);
+            res.json({ status: 'deleted', message: `File ${filename} deleted.` });
+        } else {
+            res.status(404).json({ status: 'error', message: 'File not found.' });
+        }
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: error.message });
+    }
+});
+
+// Route: Serve File for Preview
+app.get('/files/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filepath = path.join(DOWNLOAD_DIR, filename);
+    if (fs.existsSync(filepath)) {
+        res.sendFile(filepath);
+    } else {
+        res.status(404).send('File not found');
+    }
+});
+
+// Route: Delete Single Log File
+app.post('/delete-logfile/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filepath = path.join(LOGFILES_DIR, filename);
+    try {
+        if (fs.existsSync(filepath)) {
+            fs.unlinkSync(filepath);
+            res.json({ status: 'deleted', message: `File ${filename} deleted.` });
+        } else {
+            res.status(404).json({ status: 'error', message: 'File not found.' });
+        }
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: error.message });
+    }
+});
+
+// Route: Serve Log File for Preview
+app.get('/logfiles/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filepath = path.join(LOGFILES_DIR, filename);
+    if (fs.existsSync(filepath)) {
+        res.sendFile(filepath);
+    } else {
+        res.status(404).send('File not found');
     }
 });
 
