@@ -8,7 +8,7 @@ function getTimestamp() {
 }
 
 function writeLog(level, message) {
-    const logEntry = `<div class="log log-${level}">[${getTimestamp()}] ${message}</div>\n`;
+    const logEntry = `<div class="log log-${level}" data-level="${level}"><span class="timestamp">[${getTimestamp()}]</span> ${message}</div>\n`;
     console.log(`[${level.toUpperCase()}] ${message}`);
     try {
         fs.appendFileSync(LOG_FILE, logEntry);
@@ -24,7 +24,6 @@ module.exports = {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="5">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Automation Log</title>
     <style>
@@ -34,16 +33,127 @@ module.exports = {
         .log-warn { color: #ffd700; }
         .log-error { color: #f44336; font-weight: bold; }
         .log-success { color: #4caf50; font-weight: bold; }
+        .timestamp { color: #888; font-size: 0.9em; margin-right: 10px; }
+        .controls { position: sticky; top: 0; background: #1e1e1e; padding: 15px 0; border-bottom: 1px solid #333; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 15px; justify-content: space-between; align-items: center; z-index: 100; }
+        #filterInput { background: #2d2d2d; border: 1px solid #333; color: #d4d4d4; padding: 5px 10px; border-radius: 4px; width: 200px; }
+        #filterInput:focus { outline: none; border-color: #6366f1; }
+        .filters { display: flex; gap: 10px; align-items: center; }
+        .filter-cb { display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+        .btn-dl { background: #2d2d2d; border: 1px solid #333; color: #d4d4d4; padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+        .btn-dl:hover { background: #3d3d3d; }
+        .scroll-btn { position: fixed; right: 20px; width: 40px; height: 40px; background: #333; border: 1px solid #555; color: white; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.7; transition: opacity 0.2s; z-index: 90; }
+        .scroll-btn:hover { opacity: 1; background: #444; }
+        #scrollTopBtn { bottom: 70px; }
+        #scrollBottomBtn { bottom: 20px; }
     </style>
     <script>
-        window.onload = function() {
+        function scrollToBottom() {
             window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        function scrollToTop() {
+            window.scrollTo(0, 0);
+        }
+
+        function formatTimestamps() {
+            const timestamps = document.querySelectorAll('.timestamp:not([data-formatted])');
+            for (let ts of timestamps) {
+                const iso = ts.innerText.replace('[', '').replace(']', '');
+                const date = new Date(iso);
+                if (!isNaN(date.getTime())) {
+                    ts.innerText = '[' + date.toLocaleTimeString() + ']';
+                    ts.setAttribute('data-formatted', 'true');
+                    ts.title = iso;
+                }
+            }
+        }
+
+        function downloadRawLog() {
+            let text = "";
+            document.querySelectorAll('.log').forEach(el => {
+                text += el.innerText + "\\n";
+            });
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'automation-log.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        function filterLogs() {
+            const filter = document.getElementById('filterInput').value.toLowerCase();
+            const showInfo = document.getElementById('cbInfo').checked;
+            const showSuccess = document.getElementById('cbSuccess').checked;
+            const showWarn = document.getElementById('cbWarn').checked;
+            const showError = document.getElementById('cbError').checked;
+
+            const logs = document.getElementsByClassName('log');
+            for (let log of logs) {
+                const level = log.getAttribute('data-level');
+                const matchesType = (level === 'info' && showInfo) || 
+                                    (level === 'success' && showSuccess) || 
+                                    (level === 'warn' && showWarn) || 
+                                    (level === 'error' && showError);
+                
+                if (matchesType && log.innerText.toLowerCase().includes(filter)) {
+                    log.style.display = '';
+                } else {
+                    log.style.display = 'none';
+                }
+            }
+        }
+        
+        window.onload = function() {
+            scrollToBottom();
+            formatTimestamps();
+            document.getElementById('filterInput').addEventListener('input', filterLogs);
+            document.getElementById('cbInfo').addEventListener('change', filterLogs);
+            document.getElementById('cbSuccess').addEventListener('change', filterLogs);
+            document.getElementById('cbWarn').addEventListener('change', filterLogs);
+            document.getElementById('cbError').addEventListener('change', filterLogs);
         };
+
+        setInterval(() => {
+            fetch(window.location.href)
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newContainer = doc.getElementById('log-container');
+                    if (newContainer) {
+                        const currentContainer = document.getElementById('log-container');
+                        if (newContainer.childElementCount !== currentContainer.childElementCount) {
+                            const isAtBottom = (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 50;
+                            currentContainer.innerHTML = newContainer.innerHTML;
+                            filterLogs();
+                            formatTimestamps();
+                            if (isAtBottom) scrollToBottom();
+                        }
+                    }
+                })
+                .catch(e => console.error('Error refreshing logs:', e));
+        }, 2000);
     </script>
 </head>
 <body>
-    <h1>Automation Run Log</h1>
-    <p>This page will auto-refresh every 5 seconds.</p>
+    <div class="controls">
+        <h1 style="margin:0; font-size: 1.5em;">Automation Log</h1>
+        <div class="filters">
+            <label class="filter-cb"><input type="checkbox" id="cbInfo" checked> Info</label>
+            <label class="filter-cb" style="color:#4caf50"><input type="checkbox" id="cbSuccess" checked> Success</label>
+            <label class="filter-cb" style="color:#ffd700"><input type="checkbox" id="cbWarn" checked> Warn</label>
+            <label class="filter-cb" style="color:#f44336"><input type="checkbox" id="cbError" checked> Error</label>
+            <input type="text" id="filterInput" placeholder="Search logs...">
+            <button class="btn-dl" onclick="downloadRawLog()" title="Download as Text">⬇ .txt</button>
+        </div>
+    </div>
+    <button class="scroll-btn" id="scrollTopBtn" onclick="scrollToTop()" title="Scroll to Top">▲</button>
+    <button class="scroll-btn" id="scrollBottomBtn" onclick="scrollToBottom()" title="Scroll to Bottom">▼</button>
+    <p>Logs update automatically.</p>
     <div id="log-container">
 `;
         fs.writeFileSync(LOG_FILE, header);

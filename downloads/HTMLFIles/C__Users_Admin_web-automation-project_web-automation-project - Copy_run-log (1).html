@@ -1,0 +1,191 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automation Log</title>
+    <style>
+        body { font-family: Consolas, "Courier New", monospace; background-color: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; font-size: 14px; }
+        .log { white-space: pre-wrap; word-wrap: break-word; }
+        .log-info { color: #d4d4d4; }
+        .log-warn { color: #ffd700; }
+        .log-error { color: #f44336; font-weight: bold; }
+        .log-success { color: #4caf50; font-weight: bold; }
+        .timestamp { color: #888; font-size: 0.9em; margin-right: 10px; }
+        .controls { position: sticky; top: 0; background: #1e1e1e; padding: 15px 0; border-bottom: 1px solid #333; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 15px; justify-content: space-between; align-items: center; z-index: 100; }
+        #filterInput { background: #2d2d2d; border: 1px solid #333; color: #d4d4d4; padding: 5px 10px; border-radius: 4px; width: 200px; }
+        #filterInput:focus { outline: none; border-color: #6366f1; }
+        .filters { display: flex; gap: 10px; align-items: center; }
+        .filter-cb { display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+        .btn-dl { background: #2d2d2d; border: 1px solid #333; color: #d4d4d4; padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+        .btn-dl:hover { background: #3d3d3d; }
+        .scroll-btn { position: fixed; right: 20px; width: 40px; height: 40px; background: #333; border: 1px solid #555; color: white; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.7; transition: opacity 0.2s; z-index: 90; }
+        .scroll-btn:hover { opacity: 1; background: #444; }
+        #scrollTopBtn { bottom: 70px; }
+        #scrollBottomBtn { bottom: 20px; }
+    </style>
+    <script>
+        function scrollToBottom() {
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        function scrollToTop() {
+            window.scrollTo(0, 0);
+        }
+
+        function formatTimestamps() {
+            const timestamps = document.querySelectorAll('.timestamp:not([data-formatted])');
+            for (let ts of timestamps) {
+                const iso = ts.innerText.replace('[', '').replace(']', '');
+                const date = new Date(iso);
+                if (!isNaN(date.getTime())) {
+                    ts.innerText = '[' + date.toLocaleTimeString() + ']';
+                    ts.setAttribute('data-formatted', 'true');
+                    ts.title = iso;
+                }
+            }
+        }
+
+        function downloadRawLog() {
+            let text = "";
+            document.querySelectorAll('.log').forEach(el => {
+                text += el.innerText + "\n";
+            });
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'automation-log.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        function filterLogs() {
+            const filter = document.getElementById('filterInput').value.toLowerCase();
+            const showInfo = document.getElementById('cbInfo').checked;
+            const showSuccess = document.getElementById('cbSuccess').checked;
+            const showWarn = document.getElementById('cbWarn').checked;
+            const showError = document.getElementById('cbError').checked;
+
+            const logs = document.getElementsByClassName('log');
+            for (let log of logs) {
+                const level = log.getAttribute('data-level');
+                const matchesType = (level === 'info' && showInfo) || 
+                                    (level === 'success' && showSuccess) || 
+                                    (level === 'warn' && showWarn) || 
+                                    (level === 'error' && showError);
+                
+                if (matchesType && log.innerText.toLowerCase().includes(filter)) {
+                    log.style.display = '';
+                } else {
+                    log.style.display = 'none';
+                }
+            }
+        }
+        
+        window.onload = function() {
+            scrollToBottom();
+            formatTimestamps();
+            document.getElementById('filterInput').addEventListener('input', filterLogs);
+            document.getElementById('cbInfo').addEventListener('change', filterLogs);
+            document.getElementById('cbSuccess').addEventListener('change', filterLogs);
+            document.getElementById('cbWarn').addEventListener('change', filterLogs);
+            document.getElementById('cbError').addEventListener('change', filterLogs);
+        };
+
+        setInterval(() => {
+            fetch(window.location.href)
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newContainer = doc.getElementById('log-container');
+                    if (newContainer) {
+                        const currentContainer = document.getElementById('log-container');
+                        if (newContainer.childElementCount !== currentContainer.childElementCount) {
+                            const isAtBottom = (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 50;
+                            currentContainer.innerHTML = newContainer.innerHTML;
+                            filterLogs();
+                            formatTimestamps();
+                            if (isAtBottom) scrollToBottom();
+                        }
+                    }
+                })
+                .catch(e => console.error('Error refreshing logs:', e));
+        }, 2000);
+    </script>
+</head>
+<body>
+    <div class="controls">
+        <h1 style="margin:0; font-size: 1.5em;">Automation Log</h1>
+        <div class="filters">
+            <label class="filter-cb"><input type="checkbox" id="cbInfo" checked> Info</label>
+            <label class="filter-cb" style="color:#4caf50"><input type="checkbox" id="cbSuccess" checked> Success</label>
+            <label class="filter-cb" style="color:#ffd700"><input type="checkbox" id="cbWarn" checked> Warn</label>
+            <label class="filter-cb" style="color:#f44336"><input type="checkbox" id="cbError" checked> Error</label>
+            <input type="text" id="filterInput" placeholder="Search logs...">
+            <button class="btn-dl" onclick="downloadRawLog()" title="Download as Text">⬇ .txt</button>
+        </div>
+    </div>
+    <button class="scroll-btn" id="scrollTopBtn" onclick="scrollToTop()" title="Scroll to Top">▲</button>
+    <button class="scroll-btn" id="scrollBottomBtn" onclick="scrollToBottom()" title="Scroll to Bottom">▼</button>
+    <p>Logs update automatically.</p>
+    <div id="log-container">
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:18.070Z]</span> Launching browser... (Headless Mode: true)</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:20.616Z]</span> Found 1 PDF file(s) to process in 'C:\Users\Admin\web-automation-project\web-automation-project - Copy\downloads\old_files_revised': 501 W Ross Ave.pdf</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:20.632Z]</span> 
+--- Starting workflow for: 501 W Ross Ave.pdf ---</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:20.642Z]</span> 
+--- Starting Revised File Review ---</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:21.028Z]</span> Navigating to http://localhost:3000/...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:23.713Z]</span> Attempting to log in...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:24.030Z]</span> Login page title "DJRB Review" found.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:24.147Z]</span> Login form found. Entering credentials...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:25.848Z]</span> Login button clicked. Waiting for response...</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:55:28.765Z]</span> Login successful! Welcome text found.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:30.950Z]</span> Waiting for and clicking "Revised File Review"...</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:55:31.472Z]</span> "Revised File Review" clicked successfully.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:31.473Z]</span> Waiting for the revised review page to load...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:36.685Z]</span> Revised review page loaded with upload inputs.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:36.687Z]</span> Uploading old file (PDF)...</div>
+<div class="log log-warn" data-level="warn"><span class="timestamp">[2026-02-19T23:55:41.704Z]</span> Old PDF upload input not found or timed out. Skipping.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:41.705Z]</span> Uploading new file (PDF)...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:41.919Z]</span> New file (PDF) selected from: C:\Users\Admin\web-automation-project\web-automation-project - Copy\downloads\new_files_revised\501 W Ross Ave_revised.pdf</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:41.920Z]</span> Found corresponding HTML file: C:\Users\Admin\web-automation-project\web-automation-project - Copy\downloads\HTMLFIles\501 W Ross Ave.html</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:41.921Z]</span> Uploading HTML file from: C:\Users\Admin\web-automation-project\web-automation-project - Copy\downloads\HTMLFIles\501 W Ross Ave.html</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:42.177Z]</span> HTML file selected.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:42.177Z]</span> Waiting for initial file processing to complete...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:42.236Z]</span> Waiting 5 seconds...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:47.238Z]</span> Waiting for and clicking "Run Revised Analysis"...</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:55:47.583Z]</span> "Run Revised Analysis" clicked successfully.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:47.584Z]</span> Waiting for "Run Revised Analysis" extraction to complete...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:55:47.688Z]</span> Loading indicator appeared for "Run Revised Analysis".</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:56:00.027Z]</span> "Run Revised Analysis" operation completed.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:00.027Z]</span> Capturing analysis output...</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:56:02.061Z]</span> Analysis output saved to: C:\Users\Admin\web-automation-project\web-automation-project - Copy\downloads\logfiles\501 W Ross Ave_Output.txt</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:02.061Z]</span> Waiting 5 seconds...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:07.062Z]</span> Waiting for and clicking "Confirmation Checklist"...</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:56:07.441Z]</span> "Confirmation Checklist" clicked successfully.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:07.442Z]</span> Waiting 5 seconds...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:12.447Z]</span> Uploading old PDF again after checklist...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:12.664Z]</span> Old file (PDF) re-uploaded from: C:\Users\Admin\web-automation-project\web-automation-project - Copy\downloads\old_files_revised\501 W Ross Ave.pdf</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:12.665Z]</span> Waiting for 15 seconds...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:27.679Z]</span> Waiting for and clicking "Run Confirmation Check"...</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:56:28.045Z]</span> "Run Confirmation Check" clicked successfully.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:28.046Z]</span> Waiting for Confirmation Check output...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:56:28.144Z]</span> Loading indicator appeared for "Run Confirmation Check".</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:57:07.177Z]</span> Waiting 5 seconds...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:57:12.180Z]</span> Capturing and appending Confirmation Check output...</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:57:14.232Z]</span> Confirmation Check output appended to: C:\Users\Admin\web-automation-project\web-automation-project - Copy\downloads\logfiles\501 W Ross Ave_Output.txt</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:57:14.233Z]</span> Waiting 5 seconds...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:57:19.248Z]</span> Waiting for and clicking "PDF/HTML Button"...</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:57:19.630Z]</span> "PDF/HTML Button" clicked successfully.</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:57:19.631Z]</span> Waiting for PDF/HTML output...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:57:49.775Z]</span> Waiting 5 seconds...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:57:54.779Z]</span> Capturing and appending PDF/HTML output...</div>
+<div class="log log-success" data-level="success"><span class="timestamp">[2026-02-19T23:57:56.812Z]</span> PDF/HTML output appended to: C:\Users\Admin\web-automation-project\web-automation-project - Copy\downloads\logfiles\501 W Ross Ave_Output.txt</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:57:56.813Z]</span> Waiting for 10 seconds after saving to DB...</div>
+<div class="log log-info" data-level="info"><span class="timestamp">[2026-02-19T23:58:06.877Z]</span> Sending email to Kevin@djrbservices.com...</div>

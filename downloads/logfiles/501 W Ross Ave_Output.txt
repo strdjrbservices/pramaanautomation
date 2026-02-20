@@ -1,0 +1,44 @@
+--- Revision Verification ---
+
++-------------------------+---------+---------+
+| Corrected/Not Corrected | Section | Comment |
++-------------------------+---------+---------+
++-------------------------+---------+---------+
+
+
+
+
+==========
+
+--- Confirmation Check Output ---
+
++-------+----------------------------------------------------------------------------------+----------------------------------------------------------------------------------+----------------------------------------------------------------------------------+--------------+
+| Sr No | Description                                                                      | Old PDF                                                                          | New PDF                                                                          | Final Output |
++-------+----------------------------------------------------------------------------------+----------------------------------------------------------------------------------+----------------------------------------------------------------------------------+--------------+
+| 1     | Please confirm the appraised value has been changed.                             | Appraised value: $1,472,000 (Page 6)                                             | Appraised value: $1,472,000 (Page 6)                                             | no           |
+| 5     | Please confirm the GLA, total room count, bath count, and bed count from the     | GLA (3,318 sq ft), total room count (9), and bed count (4) match across          | GLA (3,318 sq ft), total room count (9), and bed count (4) match across          | no           |
+|       | Improvements section match the Sales Grid, Photos, and Sketch.                   | Improvements, Sales Grid, and Sketch. However, bath count in Improvements (4.1)  | Improvements, Sales Grid, and Sketch. However, bath count in Improvements (4.1)  |              |
+|       |                                                                                  | and Sales Grid (4.1) does not match the Sketch (3.1, indicating 3 full and 1     | and Sales Grid (4.1) does not match the Sketch (3.1, indicating 3 full and 1     |              |
+|       |                                                                                  | half bath).                                                                      | half bath).                                                                      |              |
+| 7     | Please confirm if the 216,str,rental,operating income form is present in the new | Not applicable for old report comparison.                                        | Form 216 (Operating Income Statement) is not present. The Income Approach        | no           |
+|       | report.                                                                          |                                                                                  | section on Page 3 states it was not completed due to lack of available rental    |              |
+|       |                                                                                  |                                                                                  | data.                                                                            |              |
++-------+----------------------------------------------------------------------------------+----------------------------------------------------------------------------------+----------------------------------------------------------------------------------+--------------+
+
+
+
+
+==========
+
+--- PDF/HTML Output ---
+
++-----------------+--------------------------------------+------------------------------------------------------------------------------+----------+
+| Field           | Value from HTML                      | Value from PDF                                                               | Status   |
++-----------------+--------------------------------------+------------------------------------------------------------------------------+----------+
+| Property Type   | Single Family Residential            | Townhome                                                                     | Mismatch |
+| AMC Reg. Number | MC361                                | N/A                                                                          | Mismatch |
+| Appraisal Type  | 1004 Single Family w/ 1007           | Form 1004                                                                    | Mismatch |
+| UAD XML Report  | 501 W Ross Ave Unit 2(1)_Revised.xml | Form 1004UAD - "TOTAL" appraisal software by a la mode, inc. - 1-800-ALAMODE | Mismatch |
++-----------------+--------------------------------------+------------------------------------------------------------------------------+----------+
+
+
