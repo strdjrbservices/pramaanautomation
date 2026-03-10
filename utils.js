@@ -8,8 +8,8 @@ try {
 
 }
 
-// const WEBSITE_B_URL = 'https://qa-pramaan.vercel.app/';
-const WEBSITE_B_URL ='http://localhost:3000/';
+const WEBSITE_B_URL = 'https://qa-pramaan.vercel.app/';
+// const WEBSITE_B_URL ='http://localhost:3000/';
 const WEBSITE_B_USERNAME = process.env.WEBSITE_B_USERNAME;
 const WEBSITE_B_PASSWORD = process.env.WEBSITE_B_PASSWORD;
 
