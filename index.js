@@ -14,7 +14,9 @@ const PROCESSED_FILES_LOG = path.join(__dirname, 'processed_files.log');
     try {
         logger.init();
         const launchBrowser = async () => {
-            const headlessMode = process.env.PUPPETEER_HEADLESS === 'true';
+            // Default to headless mode, which is required for server environments like Render.com.
+            // Allow overriding for local development by setting PUPPETEER_HEADLESS=false.
+            const headlessMode = process.env.PUPPETEER_HEADLESS !== 'false';
             logger.log(`Launching browser... (Headless Mode: ${headlessMode})`);
             return await puppeteer.launch({
                 headless: headlessMode,
@@ -24,6 +26,7 @@ const PROCESSED_FILES_LOG = path.join(__dirname, 'processed_files.log');
                     '--start-maximized',
                     '--disable-dev-shm-usage',
                     '--no-sandbox',
+                    '--disable-gpu',
                     '--js-flags=--max-old-space-size=16384'
                 ]
             });
