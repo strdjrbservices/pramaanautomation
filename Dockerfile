@@ -1,10 +1,6 @@
 # Use the official Puppeteer image which includes Chrome and Node.js
 FROM ghcr.io/puppeteer/puppeteer:21.5.2
 
-# Install Xvfb and other necessary packages for headful mode.
-# This is only needed if you absolutely cannot run in headless mode.
-RUN apt-get update && apt-get install -y xvfb
-
 # Switch to root user to install dependencies and create folders
 USER root
 
@@ -28,4 +24,4 @@ COPY . .
 RUN mkdir -p downloads && chmod 777 downloads
 
 # Start the server
-CMD [ "xvfb-run", "--auto-display", "--server-args='-screen 0 1024x768x24'", "node", "server.js" ]
+CMD [ "node", "server.js" ]
