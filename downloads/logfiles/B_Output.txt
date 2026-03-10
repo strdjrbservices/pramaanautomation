@@ -1,0 +1,31 @@
+--- Revision Verification ---
+
++-------------------------+---------+---------+
+| Corrected/Not Corrected | Section | Comment |
++-------------------------+---------+---------+
++-------------------------+---------+---------+
+
+
+
+
+==========
+
+--- Confirmation Check Output ---
+
+
+
+==========
+
+--- PDF/HTML Output ---
+
++-----------------------+----------------------------+--------------------------------------------+----------+
+| Field                 | Value from HTML            | Value from PDF                             | Status   |
++-----------------------+----------------------------+--------------------------------------------+----------+
+| Property Type         | N/A                        | One-Unit, Detached, Ranch                  | Mismatch |
+| Assigned to Vendor(s) | VADIM SORKIN               | CITY WIDE VALUATIONS INC                   | Mismatch |
+| AMC Reg. Number       | AMC-19-0042                | N/A                                        | Mismatch |
+| Appraisal Type        | 1004 Single Family w/ 1007 | Freddie Mac Form 70 / Fannie Mae Form 1004 | Mismatch |
+| UAD XML Report        | 263-01118.XML              | 9/2011                                     | Mismatch |
++-----------------------+----------------------------+--------------------------------------------+----------+
+
+

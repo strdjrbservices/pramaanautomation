@@ -1,0 +1,43 @@
+--- Revision Verification ---
+
++-------------------------+---------+---------+
+| Corrected/Not Corrected | Section | Comment |
++-------------------------+---------+---------+
++-------------------------+---------+---------+
+
+
+
+
+==========
+
+--- Confirmation Check Output ---
+
++-------+----------------------------------------------------------------------------------+-----------------------------------------------------------------------------+-----------------------------------------------------------------------------+--------------+
+| Sr No | Description                                                                      | Old PDF                                                                     | New PDF                                                                     | Final Output |
++-------+----------------------------------------------------------------------------------+-----------------------------------------------------------------------------+-----------------------------------------------------------------------------+--------------+
+| 1     | Please confirm the appraised value has been changed.                             | The appraised value is $350,000 (found on page 2, page 4, and page 8).      | The appraised value is $350,000 (found on page 2, page 4, and page 8).      | no           |
+| 7     | Please confirm if the 216,str,rental,operating income form is present in the new | The 216 form ('Operating Income Statement') is not present in the document. | The 216 form ('Operating Income Statement') is not present in the document. | no           |
+|       | report.                                                                          |                                                                             |                                                                             |              |
++-------+----------------------------------------------------------------------------------+-----------------------------------------------------------------------------+-----------------------------------------------------------------------------+--------------+
+
+
+
+
+==========
+
+--- PDF/HTML Output ---
+
++-----------------------+----------------------------+----------------------------------------------------------------------------------+----------+
+| Field                 | Value from HTML            | Value from PDF                                                                   | Status   |
++-----------------------+----------------------------+----------------------------------------------------------------------------------+----------+
+| Client Name           | Constitution Lending LLC   | BPL MORTGAGE, LLC                                                                | Mismatch |
+| FHA Case Number       | N/A                        | 261-02361                                                                        | Mismatch |
+| Property Type         | Single Family Residential  | Residential (1 Family)                                                           | Mismatch |
+| Assigned to Vendor(s) | Edward Welch               | Edward A. Welch, III (Higgins & Welch Appraisers, LLC)                           | Mismatch |
+| AMC Reg. Number       | AMC000222                  | N/A                                                                              | Mismatch |
+| Appraisal Type        | 1004 Single Family w/ 1007 | Uniform Residential Appraisal Report (Fannie Mae Form 1004 / Freddie Mac Form    | Mismatch |
+|                       |                            | 70)                                                                              |          |
+| UAD XML Report        | 818N38TH_Revised.XML       | N/A                                                                              | Mismatch |
++-----------------------+----------------------------+----------------------------------------------------------------------------------+----------+
+
+
