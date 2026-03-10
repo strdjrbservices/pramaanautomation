@@ -11,17 +11,23 @@ const PORT = process.env.PORT || 5000;
 
 const DOWNLOAD_DIR = path.resolve(__dirname, 'downloads');
 const LOGFILES_DIR = path.join(DOWNLOAD_DIR, 'logfiles');
-const HTML_FILES_DIR = path.join(DOWNLOAD_DIR, 'HTMLFIles');
+const HTML_FILES_DIR = path.join(DOWNLOAD_DIR, 'HTMLFiles');
 const REVISED_FILES_DIR = path.join(DOWNLOAD_DIR, 'RevisedFiles');
 const NEW_FILES_REVISED_DIR = path.join(DOWNLOAD_DIR, 'new_files_revised');
 const OLD_FILES_REVISED_DIR = path.join(DOWNLOAD_DIR, 'old_files_revised');
 const PROCESSED_FILES_DIR = path.join(DOWNLOAD_DIR, 'oldfiles');
 const LOG_FILE_PATH = path.resolve(__dirname, 'run-log.html');
+const PAUSE_LOCK_FILE = path.join(__dirname, 'pause.lock');
 
 let activeChildProcess = null;
+let server;
 
 if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+}
+
+if (fs.existsSync(PAUSE_LOCK_FILE)) {
+    try { fs.unlinkSync(PAUSE_LOCK_FILE); } catch (e) {}
 }
 
 const getSanitizedFilename = (originalname) => {
@@ -43,7 +49,7 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ 
+const upload = multer({
     storage: storage,
     fileFilter: (req, file, cb) => {
         const cleanName = getSanitizedFilename(file.originalname);
@@ -154,7 +160,7 @@ function getFilesHtml() {
 }
 
 function getHtmlFilesHtml() {
-    return generateFileListHtml(HTML_FILES_DIR, 'HTMLFIles', 'No HTML files found.');
+    return generateFileListHtml(HTML_FILES_DIR, 'HTMLFiles', 'No HTML files found.');
 }
 
 function getLogFilesHtml() {
@@ -678,11 +684,24 @@ app.get('/', (req, res) => {
 
                         <hr class="my-4 opacity-10">
 
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label for="username" class="form-label small fw-bold text-muted text-uppercase">Username</label>
+                                <input type="text" class="form-control" id="username"  placeholder="Enter username">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="password" class="form-label small fw-bold text-muted text-uppercase">Password</label>
+                                <input type="password" class="form-control" id="password"  placeholder="Enter password">
+                            </div>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label small fw-bold text-muted text-uppercase">Automation Mode</label>
                             <select class="form-select" id="automationMode">
                                 <option value="full">Full File Review</option>
                                 <option value="revised">Revised File Review</option>
+                                <option value="form1025">Form 1025 File Review</option>
+                                <option value="form1073">Form 1073 File Review</option>
                             </select>
                         </div>
 
@@ -705,9 +724,17 @@ app.get('/', (req, res) => {
                         </div>
 
                         <div class="row g-2">
-                            <div class="col-md-6">
+                            <div class="col-md-3">
                                 <button id="runBtn" class="btn btn-success w-100 py-2" onclick="runAutomation()" title="Start">
                                     <i class="bi bi-play-fill">Start</i>
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button id="pauseBtn" class="btn btn-warning w-100 py-2" onclick="pauseAutomation()" title="Pause" disabled>
+                                    <i class="bi bi-pause-fill">Pause</i>
+                                </button>
+                                <button id="resumeBtn" class="btn btn-info w-100 py-2" onclick="resumeAutomation()" title="Resume" style="display:none;">
+                                    <i class="bi bi-play-fill">Resume</i>
                                 </button>
                             </div>
                             <div class="col-md-3">
@@ -717,7 +744,7 @@ app.get('/', (req, res) => {
                             </div>
                             <div class="col-md-3">
                                 <button id="killBtn" class="btn btn-dark w-100 py-2" onclick="killAllProcesses()" title="Kill Processes">
-                                    <i class="bi bi-x-circle">Kill Processes</i>
+                                    <i class="bi bi-x-circle">Kill</i>
                                 </button>
                             </div>
                         </div>
@@ -1056,6 +1083,7 @@ app.get('/', (req, res) => {
         async function runAutomation() {
             const btn = document.getElementById('runBtn');
             const stopBtn = document.getElementById('stopBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
             btn.disabled = true;
             // stopBtn.disabled = false;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
@@ -1067,14 +1095,17 @@ app.get('/', (req, res) => {
             bar.classList.add('progress-bar-animated');
             bar.classList.remove('bg-success', 'bg-danger');
             text.innerText = 'Initializing...';
+            pauseBtn.disabled = false;
 
             try {
                 const headless = document.getElementById('headlessCheckbox').checked;
                 const mode = document.getElementById('automationMode').value;
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
                 const response = await fetch('/run', { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ headless, mode })
+                    body: JSON.stringify({ headless, mode, username, password })
                 });
                 const data = await response.json();
                 if (data.status === 'error') {
@@ -1086,10 +1117,31 @@ app.get('/', (req, res) => {
                 alert('Error starting automation: ' + error);
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-play-fill"></i>';
+                pauseBtn.disabled = true;
             }
             
             // Refresh iframe to ensure it picks up new logs
             document.getElementById('logFrame').src = document.getElementById('logFrame').src;
+        }
+
+        async function pauseAutomation() {
+            try {
+                const response = await fetch('/pause', { method: 'POST' });
+                const data = await response.json();
+                if (data.status !== 'paused') alert('Failed to pause');
+            } catch (error) {
+                alert('Error pausing: ' + error);
+            }
+        }
+
+        async function resumeAutomation() {
+            try {
+                const response = await fetch('/resume', { method: 'POST' });
+                const data = await response.json();
+                if (data.status !== 'resumed') alert('Failed to resume');
+            } catch (error) {
+                alert('Error resuming: ' + error);
+            }
         }
 
         function stopAutomation() {
@@ -1110,11 +1162,13 @@ app.get('/', (req, res) => {
                     await fetch('/kill-all', { method: 'POST' });
                     const bar = document.getElementById('progressBar');
                     const btn = document.getElementById('runBtn');
+                    const pauseBtn = document.getElementById('pauseBtn');
                     
                     bar.style.width = '0%';
                     bar.classList.remove('progress-bar-animated', 'bg-success', 'bg-danger');
                     document.getElementById('progressText').innerText = 'Processes killed.';
                     
+                    pauseBtn.disabled = true;
                     btn.disabled = false;
                     btn.innerHTML = '<i class="bi bi-play-fill"></i>';
                 } catch (error) {
@@ -1228,6 +1282,8 @@ app.get('/', (req, res) => {
                     const bar = document.getElementById('progressBar');
                     const text = document.getElementById('progressText');
                     const btn = document.getElementById('runBtn');
+                    const pauseBtn = document.getElementById('pauseBtn');
+                    const resumeBtn = document.getElementById('resumeBtn');
                     const stopBtn = document.getElementById('stopBtn');
                     
                     bar.style.width = data.progress + '%';
@@ -1241,7 +1297,16 @@ app.get('/', (req, res) => {
                         
                         btn.disabled = false;
                         btn.innerHTML = '<i class="bi bi-play-fill"></i>';
+                        pauseBtn.disabled = true;
+                        resumeBtn.style.display = 'none';
+                        pauseBtn.style.display = 'inline-block';
                         refreshFileLists();
+                    } else if (data.isPaused) {
+                        pauseBtn.style.display = 'none';
+                        resumeBtn.style.display = 'inline-block';
+                    } else {
+                        pauseBtn.style.display = 'inline-block';
+                        resumeBtn.style.display = 'none';
                     }
                 } catch (e) {
                     console.error('Error fetching progress:', e);
@@ -1262,7 +1327,7 @@ app.post('/upload', (req, res) => {
         if (!req.files || req.files.length === 0) {
             return res.status(400).send('No files uploaded.');
         }
-        
+
         req.files.forEach(file => {
             if (file.originalname.toLowerCase().endsWith('.html')) {
                 const oldPath = path.join(DOWNLOAD_DIR, file.filename);
@@ -1335,11 +1400,19 @@ app.post('/run', (req, res) => {
 
     const headless = (req.body && req.body.headless) ? 'true' : 'false';
     const mode = req.body.mode || 'full';
+    const username = req.body.username || '';
+    const password = req.body.password || '';
     console.log(`🚀 Spawning process with PUPPETEER_HEADLESS=${headless} AUTOMATION_MODE=${mode}`);
 
-    const child = spawn('node', ['index.js'], { 
+    const child = spawn('node', ['index.js'], {
         cwd: __dirname,
-        env: { ...process.env, PUPPETEER_HEADLESS: headless, AUTOMATION_MODE: mode }
+        env: {
+            ...process.env,
+            PUPPETEER_HEADLESS: headless,
+            AUTOMATION_MODE: mode,
+            WEBSITE_B_USERNAME: username,
+            WEBSITE_B_PASSWORD: password
+        }
     });
     activeChildProcess = child;
 
@@ -1354,9 +1427,55 @@ app.post('/run', (req, res) => {
     child.on('close', (code) => {
         console.log(`Child process exited with code ${code}`);
         activeChildProcess = null;
+
+        const statusMessage = code === 0 ? 'Automation completed successfully' : 'Automation finished with errors';
+        const logMessage = `[SERVER] ${statusMessage}. Server will shut down shortly.`;
+        
+        if (code === 0) {
+            logger.success(logMessage);
+        } else {
+            logger.error(logMessage);
+        }
+        
+        setTimeout(() => {
+            if (server) {
+                server.close(() => {
+                    console.log('[SERVER] Server has been shut down.');
+                    process.exit(code === 0 ? 0 : 1);
+                });
+            } else {
+                process.exit(code === 0 ? 0 : 1);
+            }
+        }, 3000);
     });
 
     res.json({ status: 'started', message: 'Automation process started in the background.' });
+});
+
+app.post('/pause', (req, res) => {
+    try {
+        fs.writeFileSync(PAUSE_LOCK_FILE, 'paused');
+        try {
+            fs.appendFileSync(LOG_FILE_PATH, `<div class="log log-warn">[${new Date().toISOString()}] ⏸ Automation paused by user.</div>\n`);
+        } catch (e) { }
+        res.json({ status: 'paused', message: 'Automation paused.' });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+app.post('/resume', (req, res) => {
+    try {
+        if (fs.existsSync(PAUSE_LOCK_FILE)) {
+            fs.unlinkSync(PAUSE_LOCK_FILE);
+        }
+        try {
+            fs.appendFileSync(LOG_FILE_PATH, `<div class="log log-success">[${new Date().toISOString()}] ▶ Automation resumed by user.</div>\n`);
+        } catch (e) { }
+        res.json({ status: 'resumed', message: 'Automation resumed.' });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
 });
 
 app.post('/stop', (req, res) => {
@@ -1369,7 +1488,7 @@ app.post('/stop', (req, res) => {
             activeChildProcess.kill();
         }
         activeChildProcess = null;
-        
+
         try {
             fs.appendFileSync(LOG_FILE_PATH, `<div class="log log-error">[${new Date().toISOString()}] 🛑 Automation stopped by user.</div>\n`);
         } catch (e) { console.error("Error writing to log:", e); }
@@ -1383,23 +1502,27 @@ app.post('/stop', (req, res) => {
 app.post('/kill-all', (req, res) => {
     if (activeChildProcess) {
         if (process.platform === 'win32') {
-            exec(`taskkill /pid ${activeChildProcess.pid} /T /F`, () => {});
+            exec(`taskkill /pid ${activeChildProcess.pid} /T /F`, () => { });
         } else {
             activeChildProcess.kill();
         }
         activeChildProcess = null;
     }
-    
+
     if (process.platform === 'win32') {
-        exec('wmic process where "name=\'node.exe\' and commandline like \'%index.js%\'" call terminate', () => {});
+        exec('wmic process where "name=\'node.exe\' and commandline like \'%index.js%\'" call terminate', () => { });
     } else {
-        exec('pkill -f "node index.js"', () => {});
+        exec('pkill -f "node index.js"', () => { });
     }
 
     try {
         fs.appendFileSync(LOG_FILE_PATH, `<div class="log log-error">[${new Date().toISOString()}] ☠ Kill All Processes triggered.</div>\n`);
-    } catch (e) {}
-    
+    } catch (e) { }
+
+    if (fs.existsSync(PAUSE_LOCK_FILE)) {
+        try { fs.unlinkSync(PAUSE_LOCK_FILE); } catch (e) {}
+    }
+
     res.json({ status: 'killed', message: 'Processes killed and state reset.' });
 });
 
@@ -1562,6 +1685,7 @@ app.get('/progress', (req, res) => {
         const logContent = fs.readFileSync(LOG_FILE_PATH, 'utf8');
         let progress = 0;
         let status = 'Initializing...';
+        const isPaused = fs.existsSync(PAUSE_LOCK_FILE);
 
         if (logContent.includes('An error occurred')) {
             status = 'Error detected. Check logs.';
@@ -1570,6 +1694,8 @@ app.get('/progress', (req, res) => {
         } else if (logContent.includes('✅ All files processed successfully!')) {
             progress = 100;
             status = 'Completed!';
+        } else if (isPaused) {
+            status = 'Paused';
         } else {
             let files = [];
             if (fs.existsSync(DOWNLOAD_DIR)) {
@@ -1615,9 +1741,9 @@ app.get('/progress', (req, res) => {
             }
         }
 
-        res.json({ progress, status });
+        res.json({ progress, status, isPaused });
     } catch (e) {
-        res.json({ progress: 0, status: 'Error reading progress' });
+        res.json({ progress: 0, status: 'Error reading progress', isPaused: false });
     }
 });
 
@@ -1644,7 +1770,7 @@ app.get('/download-log', (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
+server = app.listen(PORT, () => {
     console.log(`\n🚀 UI Server running at http://localhost:${PORT}`);
     console.log(`📂 Uploads will be saved to: ${DOWNLOAD_DIR}`);
 });

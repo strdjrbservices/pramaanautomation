@@ -19,7 +19,8 @@ const {
     waitAndClick,
     clickAndWaitForExtraction,
     waitForDownload,
-    sendEmail
+    sendEmail,
+    performLogin
 } = require('./utils');
 
 async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false) {
@@ -39,48 +40,7 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
     logger.log(`Navigating to ${WEBSITE_B_URL}...`);
     await page.goto(WEBSITE_B_URL, { waitUntil: 'networkidle2' });
 
-    if (isFirstRun) {
-        logger.log('Attempting to log in...');
-        try {
-            const loginTitleSelector = "::-p-xpath(//*[normalize-space(.)='DJRB Review'])";
-            await page.waitForSelector(loginTitleSelector, { timeout: 10000 });
-            logger.log('Login page title "DJRB Review" found.');
-
-            await page.waitForSelector(WEBSITE_B_USERNAME_SELECTOR, { timeout: 30000 });
-            logger.log('Login form found. Entering credentials...');
-
-            await page.type(WEBSITE_B_USERNAME_SELECTOR, WEBSITE_B_USERNAME);
-            await page.type(WEBSITE_B_PASSWORD_SELECTOR, WEBSITE_B_PASSWORD);
-
-            await page.click(WEBSITE_B_LOGIN_BUTTON_SELECTOR);
-            logger.log('Login button clicked. Waiting for response...');
-
-            const welcomeTextSelector = "::-p-xpath(//*[contains(text(), 'Appraisal Tools')])";
-            const loginErrorSelector = "::-p-xpath(//*[contains(@class, 'MuiAlert-root') and contains(., 'Invalid')])";
-
-            await Promise.race([
-                page.waitForSelector(welcomeTextSelector),
-                page.waitForSelector(loginErrorSelector),
-            ]);
-
-            if (await page.$(loginErrorSelector)) {
-                throw new Error('Login failed. The page displayed an "Invalid" credentials error.');
-            }
-
-            logger.success('Login successful! Welcome text found.');
-        } catch (error) {
-            throw new Error(`Login failed. Please check your credentials. Original error: ${error.message}`);
-        }
-    } else {
-        logger.log('Skipping login for subsequent file, assuming session is active.');
-        try {
-            const welcomeTextSelector = "::-p-xpath(//*[contains(text(), 'Appraisal Tools')])";
-            await page.waitForSelector(welcomeTextSelector, { timeout: 30000 });
-            logger.success('Dashboard loaded, session is active.');
-        } catch (error) {
-            throw new Error(`Could not verify active session on subsequent run. Dashboard welcome text not found. Error: ${error.message}`);
-        }
-    }
+    await performLogin(page, isFirstRun);
 
     await page.waitForNetworkIdle({ idleTime: 500 });
 
@@ -145,7 +105,7 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
     }
 
     const htmlFileName = path.basename(pdfFilePath).replace(/\.pdf$/i, '.html');
-    const htmlFilePath = path.join(DOWNLOAD_PATH, 'HTMLFIles', htmlFileName);
+    const htmlFilePath = path.join(DOWNLOAD_PATH, 'HTMLFiles', htmlFileName);
 
     if (fs.existsSync(htmlFilePath)) {
         logger.log(`Found corresponding HTML file: ${htmlFilePath}`);
@@ -442,7 +402,6 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
     const endTime = Date.now();
     const durationInMinutes = ((endTime - startTime) / 60000).toFixed(2);
     logger.success(`\n✅ Revised File Review processing completed in ${durationInMinutes} minutes.`);
-    await page.close();
     logger.log('--- Finished Revised File Review ---');
     await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
@@ -472,10 +431,11 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
             `The automation process for ${path.basename(pdfFilePath)} failed.\n\nError: ${error.message}\n\nAttached:\n- Uploaded PDF\n- System Logs\n- Partial Output (if available)\n- Error Screenshot`,
             attachments
         );
+        throw error;
+    } finally {
         if (page && !page.isClosed()) {
             await page.close();
         }
-        throw error;
     }
 }
 
