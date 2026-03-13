@@ -1428,25 +1428,16 @@ app.post('/run', (req, res) => {
         console.log(`Child process exited with code ${code}`);
         activeChildProcess = null;
 
-        const statusMessage = code === 0 ? 'Automation completed successfully' : 'Automation finished with errors';
-        const logMessage = `[SERVER] ${statusMessage}. Server will shut down shortly.`;
-        
+        const statusMessage = code === 0 ? 'Automation completed successfully' : 'Automation finished with errors.';
+        const logMessage = `[SERVER] ${statusMessage}`;
+
         if (code === 0) {
             logger.success(logMessage);
         } else {
             logger.error(logMessage);
         }
-        
-        setTimeout(() => {
-            if (server) {
-                server.close(() => {
-                    console.log('[SERVER] Server has been shut down.');
-                    process.exit(code === 0 ? 0 : 1);
-                });
-            } else {
-                process.exit(code === 0 ? 0 : 1);
-            }
-        }, 3000);
+
+        // Per user request, the server will no longer shut down automatically.
     });
 
     res.json({ status: 'started', message: 'Automation process started in the background.' });

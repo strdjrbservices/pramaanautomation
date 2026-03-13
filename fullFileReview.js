@@ -17,5 +17,4 @@ const FULL_FILE_REVIEW_CONFIG = {
 async function processFullFileReview(browser, pdfFilePath, isFirstRun = false) {
     return processFileReview(browser, pdfFilePath, isFirstRun, FULL_FILE_REVIEW_CONFIG);
 }
-
 module.exports = { processFullFileReview };

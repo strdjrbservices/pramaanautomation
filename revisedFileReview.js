@@ -1,6 +1,11 @@
 const path = require('path');
 const fs = require('fs');
 const logger = require('./logger');
+let xlsx;
+try {
+    xlsx = require('xlsx');
+} catch (e) {
+}
 const {
     WEBSITE_B_URL,
     WEBSITE_B_USERNAME,
@@ -137,9 +142,9 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
         await clickAndWaitForExtraction(page, step.selector, step.name, TIMEOUTS.LONG);
     }
 
-    const captureAndFormatTablesScript = () => {
+    const captureTablesDataScript = () => {
         const tables = document.querySelectorAll('table');
-        let capturedText = '';
+        const allTablesData = [];
 
         tables.forEach(table => {
             const rows = Array.from(table.querySelectorAll('tr'));
@@ -165,118 +170,32 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
 
             dataRows.forEach(row => {
                 const cells = Array.from(row.querySelectorAll('th, td')).map(cell => cell.innerText.replace(/\n/g, ' ').trim());
-
-                if (!isTargetTable) {
-                    filteredData.push(cells);
-                    return;
-                }
-
-                let keep = false;
-                if (idxCorrected !== -1 && idxComment !== -1) {
-                    if ((cells[idxCorrected] || '').toLowerCase().includes('not fulfilled') && (cells[idxComment] || '').length > 0) keep = true;
-                }
-                if (!keep && idxFinalOutput !== -1 && idxOldPdf !== -1 && idxNewPdf !== -1) {
-                    if ((cells[idxFinalOutput] || '').toLowerCase() === 'no' && (cells[idxOldPdf] || '').length > 0 && (cells[idxNewPdf] || '').length > 0) keep = true;
-                }
-                if (!keep && idxStatus !== -1 && idxHtmlVal !== -1 && idxPdfVal !== -1) {
-                    if ((cells[idxStatus] || '').toLowerCase() === 'mismatch' && (cells[idxHtmlVal] || '').length > 0 && (cells[idxPdfVal] || '').length > 0) keep = true;
-                }
-
-                if (keep) filteredData.push(cells);
+                // Per user request, include all rows (fulfilled, yes, match) in the output.
+                // This means we no longer filter rows.
+                filteredData.push(cells);
             });
 
             const finalRows = [headers, ...filteredData];
-            if (finalRows.length === 0 || finalRows[0].length === 0) return;
-
-            const MAX_COL_WIDTH = 80;
-
-            const colWidths = finalRows[0].map((_, i) => {
-                const maxWidth = Math.max(...finalRows.map(row => (row[i] || '').length));
-                return Math.min(maxWidth, MAX_COL_WIDTH);
-            });
-
-            const wrapText = (text, width) => {
-                text = text || '';
-                if (text.length <= width) {
-                    return [text];
-                }
-
-                const words = text.split(' ');
-                const resultLines = [];
-                let currentLine = '';
-
-                for (const word of words) {
-                    if (word.length > width) {
-                        if (currentLine.length > 0) {
-                            resultLines.push(currentLine);
-                        }
-                        let tempWord = word;
-                        while (tempWord.length > width) {
-                            resultLines.push(tempWord.slice(0, width));
-                            tempWord = tempWord.slice(width);
-                        }
-                        currentLine = tempWord;
-                        continue;
-                    }
-
-                    if ((currentLine + ' ' + word).trim().length > width) {
-                        resultLines.push(currentLine);
-                        currentLine = word;
-                    } else {
-                        currentLine = (currentLine + ' ' + word).trim();
-                    }
-                }
-
-                if (currentLine) {
-                    resultLines.push(currentLine);
-                }
-
-                return resultLines.length > 0 ? resultLines : [''];
-            };
-
-            const separator = '+' + colWidths.map(w => '-'.repeat(w + 2)).join('+') + '+';
-            let tableText = separator + '\n';
-
-            finalRows.forEach((row, rowIndex) => {
-                const wrappedCells = row.map((cell, i) => wrapText(cell || '', colWidths[i]));
-                const maxLines = Math.max(...wrappedCells.map(lines => lines.length));
-
-                for (let lineIndex = 0; lineIndex < maxLines; lineIndex++) {
-                    const lineParts = wrappedCells.map((lines, colIndex) => {
-                        const text = lines[lineIndex] || '';
-                        return ' ' + text.padEnd(colWidths[colIndex]) + ' ';
-                    });
-                    tableText += '|' + lineParts.join('|') + '|\n';
-                }
-
-                if (rowIndex === 0) {
-                    tableText += separator + '\n';
-                }
-            });
-
-            tableText += separator + '\n';
-
-            capturedText += tableText + '\n\n';
+            if (finalRows.length > 1) { // Only add if there are data rows
+                allTablesData.push(finalRows);
+            }
         });
 
-        return capturedText;
+        return allTablesData;
     };
+
+    const workbookData = [];
+    let hasMismatch = false;
 
     logger.log('Capturing analysis output...');
     try {
         await new Promise(resolve => setTimeout(resolve, 2000));
-        const outputText = await page.evaluate(captureAndFormatTablesScript);
-
-        const logFilesDir = path.join(DOWNLOAD_PATH, 'logfiles');
-        if (!fs.existsSync(logFilesDir)) {
-            fs.mkdirSync(logFilesDir, { recursive: true });
+        const revisionTables = await page.evaluate(captureTablesDataScript);
+        if (revisionTables.length > 0) {
+            workbookData.push({ name: 'Revision Verification', tables: revisionTables });
+            hasMismatch = true;
         }
-
-        const outputFileName = `${path.basename(pdfFilePath, path.extname(pdfFilePath))}_Output.txt`;
-        const outputFilePath = path.join(logFilesDir, outputFileName);
-        const contentWithHeader = `--- Revision Verification ---\n\n${outputText}`;
-        fs.writeFileSync(outputFilePath, contentWithHeader);
-        logger.success(`Analysis output saved to: ${outputFilePath}`);
+        logger.success(`Captured data for 'Revision Verification'.`);
     } catch (error) {
         logger.error(`Failed to capture output text: ${error.message}`);
     }
@@ -332,18 +251,14 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
     logger.log('Capturing and appending Confirmation Check output...');
     try {
         await new Promise(resolve => setTimeout(resolve, 2000));
-        const confirmationOutputText = await page.evaluate(captureAndFormatTablesScript);
-
-        const logFilesDir = path.join(DOWNLOAD_PATH, 'logfiles');
-        const outputFileName = `${path.basename(pdfFilePath, path.extname(pdfFilePath))}_Output.txt`;
-        const outputFilePath = path.join(logFilesDir, outputFileName);
-
-        const contentToAppend = `\n\n==========\n\n--- Confirmation Check Output ---\n\n${confirmationOutputText}`;
-        fs.appendFileSync(outputFilePath, contentToAppend);
-
-        logger.success(`Confirmation Check output appended to: ${outputFilePath}`);
+        const confirmationTables = await page.evaluate(captureTablesDataScript);
+        if (confirmationTables.length > 0) {
+            workbookData.push({ name: 'Confirmation Check', tables: confirmationTables });
+            hasMismatch = true;
+        }
+        logger.success(`Captured data for 'Confirmation Check'.`);
     } catch (error) {
-        logger.error(`Failed to capture and append confirmation output text: ${error.message}`);
+        logger.error(`Failed to capture confirmation output text: ${error.message}`);
     }
 
     logger.log('Waiting 5 seconds...');
@@ -365,31 +280,133 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
     logger.log('Capturing and appending PDF/HTML output...');
     try {
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for UI to settle
-        const pdfHtmlOutputText = await page.evaluate(captureAndFormatTablesScript);
-
-        const logFilesDir = path.join(DOWNLOAD_PATH, 'logfiles');
-        const outputFileName = `${path.basename(pdfFilePath, path.extname(pdfFilePath))}_Output.txt`;
-        const outputFilePath = path.join(logFilesDir, outputFileName);
-
-        const contentToAppend = `\n\n==========\n\n--- PDF/HTML Output ---\n\n${pdfHtmlOutputText}`;
-        fs.appendFileSync(outputFilePath, contentToAppend);
-
-        logger.success(`PDF/HTML output appended to: ${outputFilePath}`);
+        const pdfHtmlTables = await page.evaluate(captureTablesDataScript);
+        if (pdfHtmlTables.length > 0) {
+            workbookData.push({ name: 'PDF_HTML Output', tables: pdfHtmlTables });
+            hasMismatch = true;
+        }
+        logger.success(`Captured data for 'PDF/HTML Output'.`);
     } catch (error) {
-        logger.error(`Failed to capture and append PDF/HTML output text: ${error.message}`);
+        logger.error(`Failed to capture PDF/HTML output text: ${error.message}`);
     }
 
+    const logFilesDir = path.join(DOWNLOAD_PATH, 'logfiles');
+    if (!fs.existsSync(logFilesDir)) {
+        fs.mkdirSync(logFilesDir, { recursive: true });
+    }
+    const outputFileName = `${path.basename(pdfFilePath, path.extname(pdfFilePath))}_Output.xlsx`;
+    const outputFilePath = path.join(logFilesDir, outputFileName);
+
+    if (workbookData.length > 0) {
+        if (xlsx) {
+            const wb = xlsx.utils.book_new();
+            const allRowsForSingleSheet = [];
+            const rowMetadata = []; // { type: 'sectionHeader' | 'tableHeader' | 'data' | 'empty', sectionIndex: number }
+
+            workbookData.forEach((sheetData, sheetIndex) => {
+                if (sheetIndex > 0) {
+                    allRowsForSingleSheet.push([]);
+                    rowMetadata.push({ type: 'empty', sectionIndex: sheetIndex });
+                    allRowsForSingleSheet.push([]);
+                    rowMetadata.push({ type: 'empty', sectionIndex: sheetIndex });
+                }
+
+                allRowsForSingleSheet.push([`--- ${sheetData.name} ---`]);
+                rowMetadata.push({ type: 'sectionHeader', sectionIndex: sheetIndex });
+
+                allRowsForSingleSheet.push([]);
+                rowMetadata.push({ type: 'empty', sectionIndex: sheetIndex });
+
+                sheetData.tables.forEach((table, tableIndex) => {
+                    if (tableIndex > 0) {
+                        allRowsForSingleSheet.push([]); // separator row between tables
+                        rowMetadata.push({ type: 'empty', sectionIndex: sheetIndex });
+                    }
+                    table.forEach((row, i) => {
+                        allRowsForSingleSheet.push(row);
+                        rowMetadata.push({
+                            type: i === 0 ? 'tableHeader' : 'data',
+                            sectionIndex: sheetIndex
+                        });
+                    });
+                });
+            });
+
+            if (allRowsForSingleSheet.length > 0) {
+                const ws = xlsx.utils.aoa_to_sheet(allRowsForSingleSheet);
+
+                // Style definitions
+                const sectionHeaderStyles = [
+                    { font: { bold: true, sz: 14, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "4F81BD" } }, alignment: { horizontal: "center" } }, // Blue
+                    { font: { bold: true, sz: 14, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "C0504D" } }, alignment: { horizontal: "center" } }, // Red
+                    { font: { bold: true, sz: 14, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "9BBB59" } }, alignment: { horizontal: "center" } }  // Green
+                ];
+                const tableHeaderStyle = {
+                    font: { bold: true },
+                    fill: { fgColor: { rgb: "BFBFBF" } }, // Grey
+                    border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } }
+                };
+                const dataCellStyles = [
+                    { fill: { fgColor: { rgb: "DCE6F1" } }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } }, // Light Blue
+                    { fill: { fgColor: { rgb: "F2DCDB" } }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } }, // Light Red
+                    { fill: { fgColor: { rgb: "E6EED5" } }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } }  // Light Green
+                ];
+
+                if (!ws['!merges']) ws['!merges'] = [];
+
+                rowMetadata.forEach((meta, R) => {
+                    const row = allRowsForSingleSheet[R];
+                    if (!row) return;
+
+                    let style;
+                    switch (meta.type) {
+                        case 'sectionHeader':
+                            style = sectionHeaderStyles[meta.sectionIndex % sectionHeaderStyles.length];
+                            const cellAddress = xlsx.utils.encode_cell({ r: R, c: 0 });
+                            if (ws[cellAddress]) ws[cellAddress].s = style;
+                            ws['!merges'].push({ s: { r: R, c: 0 }, e: { r: R, c: 15 } });
+                            break;
+                        case 'tableHeader':
+                            style = tableHeaderStyle;
+                            for (let C = 0; C < row.length; ++C) {
+                                const cellAddress = xlsx.utils.encode_cell({ r: R, c: C });
+                                if (ws[cellAddress]) ws[cellAddress].s = style;
+                            }
+                            break;
+                        case 'data':
+                            style = dataCellStyles[meta.sectionIndex % dataCellStyles.length];
+                            for (let C = 0; C < row.length; ++C) {
+                                const cellAddress = xlsx.utils.encode_cell({ r: R, c: C });
+                                if (ws[cellAddress]) ws[cellAddress].s = style;
+                            }
+                            break;
+                    }
+                });
+
+                // Auto-fit columns
+                const colWidths = allRowsForSingleSheet.reduce((acc, row) => {
+                    row.forEach((cell, C) => {
+                        const cellLen = cell ? String(cell).length : 0;
+                        if (!acc[C] || cellLen > acc[C]) acc[C] = cellLen;
+                    });
+                    return acc;
+                }, []);
+                ws['!cols'] = colWidths.map(w => ({ wch: Math.min(w + 2, 60) }));
+
+                xlsx.utils.book_append_sheet(wb, ws, 'Analysis Output');
+                xlsx.writeFile(wb, outputFilePath);
+                logger.success(`Analysis output saved to: ${outputFilePath}`);
+            }
+        } else {
+            logger.warn('`xlsx` package not found. Skipping Excel report generation. Please run `npm install xlsx`.');
+        }
+    }
 
     logger.log('Waiting for 10 seconds after saving to DB...');
     await new Promise(resolve => setTimeout(resolve, 10000));
 
-    const logFilesDir = path.join(DOWNLOAD_PATH, 'logfiles');
-    const outputFileName = `${path.basename(pdfFilePath, path.extname(pdfFilePath))}_Output.txt`;
-    const outputFilePath = path.join(logFilesDir, outputFileName);
-
     if (fs.existsSync(outputFilePath)) {
-        const fileContent = fs.readFileSync(outputFilePath, 'utf8');
-        const status = fileContent.includes('|') ? "Action Required" : "Review Completed";
+        const status = hasMismatch ? "Action Required" : "Review Completed";
         const runLogPath = path.join(__dirname, 'run-log.html');
 
         await sendEmail(
@@ -408,7 +425,7 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
         logger.error(`❌ Error during Revised File Review: ${error.message}`);
         const runLogPath = path.join(__dirname, 'run-log.html');
         const logFilesDir = path.join(DOWNLOAD_PATH, 'logfiles');
-        const outputFileName = `${path.basename(pdfFilePath, path.extname(pdfFilePath))}_Output.txt`;
+        const outputFileName = `${path.basename(pdfFilePath, path.extname(pdfFilePath))}_Output.xlsx`;
         const outputFilePath = path.join(logFilesDir, outputFileName);
 
         const attachments = [pdfFilePath, runLogPath];
