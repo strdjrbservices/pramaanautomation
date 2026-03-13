@@ -290,6 +290,35 @@ async function processRevisedFileReview(browser, pdfFilePath, isFirstRun = false
         logger.error(`Failed to capture PDF/HTML output text: ${error.message}`);
     }
 
+    logger.log('Waiting 5 seconds...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    await waitAndClick(page, "::-p-xpath(//button[normalize-space()='PDF/PDF'])", "PDF/PDF Button");
+
+    logger.log('Waiting for PDF/PDF output...');
+    try {
+        await page.waitForSelector(MAIN_LOADING_INDICATOR_SELECTOR, { visible: true, timeout: 5000 });
+    } catch (e) {
+
+    }
+    await page.waitForSelector(MAIN_LOADING_INDICATOR_SELECTOR, { hidden: true, timeout: 300000 });
+
+    logger.log('Waiting 5 seconds...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    logger.log('Capturing and appending PDF/PDF output...');
+    try {
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for UI to settle
+        const pdfPdfTables = await page.evaluate(captureTablesDataScript);
+        if (pdfPdfTables.length > 0) {
+            workbookData.push({ name: 'PDF_PDF Output', tables: pdfPdfTables });
+            hasMismatch = true;
+        }
+        logger.success(`Captured data for 'PDF/PDF Output'.`);
+    } catch (error) {
+        logger.error(`Failed to capture PDF/PDF output text: ${error.message}`);
+    }
+
     const logFilesDir = path.join(DOWNLOAD_PATH, 'logfiles');
     if (!fs.existsSync(logFilesDir)) {
         fs.mkdirSync(logFilesDir, { recursive: true });
