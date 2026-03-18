@@ -71,7 +71,15 @@ const newFilesStorage = multer.diskStorage({
         cb(null, getSanitizedFilename(file.originalname));
     }
 });
-const uploadNewFiles = multer({ storage: newFilesStorage });
+const uploadNewFiles = multer({ 
+    storage: newFilesStorage,
+    fileFilter: (req, file, cb) => {
+        if (!file.originalname.toLowerCase().endsWith('_revised.pdf')) {
+            return cb(new Error('Only files ending with "_revised.pdf" are allowed.'), false);
+        }
+        cb(null, true);
+    }
+});
 
 const oldFilesStorage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -97,7 +105,15 @@ const htmlFilesStorage = multer.diskStorage({
         cb(null, getSanitizedFilename(file.originalname));
     }
 });
-const uploadHtmlFiles = multer({ storage: htmlFilesStorage });
+const uploadHtmlFiles = multer({ 
+    storage: htmlFilesStorage,
+    fileFilter: (req, file, cb) => {
+        if (!file.originalname.toLowerCase().endsWith('.html')) {
+            return cb(new Error('Only HTML files are allowed.'), false);
+        }
+        cb(null, true);
+    }
+});
 
 function generateFileListHtml(dirPath, relativePath, emptyMessage) {
     try {
@@ -130,14 +146,14 @@ function generateFileListHtml(dirPath, relativePath, emptyMessage) {
                     }
                     const filePath = relativePath ? `${relativePath}/${f}` : f;
                     return `
-                    <li class="list-group-item d-flex justify-content-between align-items-center p-3 mb-2 border-0 shadow-sm rounded-3">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
                         <div class="d-flex align-items-center overflow-hidden">
-                            <div class="rounded-3 p-2 me-3 ${bgClass} ${colorClass} d-flex align-items-center justify-content-center flex-shrink-0" style="width: 42px; height: 42px;">
-                                <i class="bi ${icon} fs-5"></i>
+                            <div class="rounded-2 p-2 me-3 ${bgClass} ${colorClass} d-flex align-items-center justify-content-center flex-shrink-0" style="width: 38px; height: 38px;">
+                                <i class="bi ${icon} fs-6"></i>
                             </div>
                             <span class="fw-medium text-truncate" title="${f}">${f}</span>
                         </div>
-                        <div class="btn-group ms-2 opacity-75">
+                        <div class="btn-group ms-2 action-buttons">
                             <a href="/files/${encodeURIComponent(filePath)}" target="_blank" class="btn btn-sm btn-light text-primary" title="Preview"><i class="bi bi-eye"></i></a>
                             <button class="btn btn-sm btn-light text-secondary" onclick="renameFile('${filePath}')" title="Rename"><i class="bi bi-pencil-square"></i></button>
                             <button class="btn btn-sm btn-light text-danger" onclick="deleteFile('${filePath}')" title="Delete"><i class="bi bi-trash"></i></button>
@@ -199,52 +215,57 @@ app.get('/', (req, res) => {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #4f46e5;
-            --secondary-color: #8b5cf6;
-            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #9333ea 100%);
-            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            --danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            --card-bg-light: rgba(255, 255, 255, 0.9);
-            --card-bg-dark: rgba(15, 23, 42, 0.85);
-            --body-bg-light: #f8fafc;
-            --body-bg-dark: #0f172a;
-            --text-light: #1e293b;
-            --text-dark: #e2e8f0;
-            --border-light: rgba(0,0,0,0.05);
-            --border-dark: rgba(255,255,255,0.08);
-            --border-radius: 1rem;
+            --bs-primary-rgb: 99, 102, 241;
+            --bs-primary: #6366f1;
+            --primary-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --success-gradient: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            --danger-gradient: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+            
+            --bs-body-bg-light: #f1f5f9;
+            --bs-body-bg-dark: #020617;
+            --bs-body-color-light: #0f172a;
+            --bs-body-color-dark: #e2e8f0;
+
+            --card-bg-light: #ffffff;
+            --card-bg-dark: #0f172a;
+            --card-border-light: #e2e8f0;
+            --card-border-dark: #1e293b;
+
+            --border-radius: 0.75rem;
             --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+        
+        [data-bs-theme="light"] {
+            --bs-body-bg: var(--bs-body-bg-light);
+            --bs-body-color: var(--bs-body-color-light);
+            --card-bg: var(--card-bg-light);
+            --card-border: var(--card-border-light);
+        }
+
+        [data-bs-theme="dark"] {
+            --bs-body-bg: var(--bs-body-bg-dark);
+            --bs-body-color: var(--bs-body-color-dark);
+            --card-bg: var(--card-bg-dark);
+            --card-border: var(--card-border-dark);
         }
         
         body {
             font-family: 'Inter', sans-serif;
-            background-color: var(--body-bg-light);
-            color: var(--text-light);
+            background-color: var(--bs-body-bg);
+            color: var(--bs-body-color);
             transition: background-color 0.3s ease, color 0.3s ease;
             min-height: 100vh;
             padding-bottom: 60px;
-            background-image:
-                radial-gradient(circle at 0% 0%, rgba(79, 70, 229, 0.08), transparent 40%),
-                radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.08), transparent 40%);
-            background-attachment: fixed;
-        }
-
-        [data-bs-theme="dark"] body {
-            background-color: var(--body-bg-dark);
-            color: var(--text-dark);
-            background-image:
-                radial-gradient(circle at 0% 0%, rgba(79, 70, 229, 0.15), transparent 40%),
-                radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.15), transparent 40%);
         }
 
         .main-header {
             background: var(--primary-gradient);
             color: white;
-            padding: 3.5rem 0 5rem;
-            margin-bottom: -4rem;
-            border-radius: 0 0 2.5rem 2.5rem;
+            padding: 4rem 0 6rem;
+            margin-bottom: -4.5rem;
+            border-radius: 0 0 2rem 2rem;
             box-shadow: var(--shadow-lg);
             position: relative;
             overflow: hidden;
@@ -253,45 +274,44 @@ app.get('/', (req, res) => {
         .main-header::before {
             content: '';
             position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-            animation: rotate 20s linear infinite;
+            top: 50%;
+            left: 50%;
+            width: 150%;
+            padding-bottom: 150%;
+            border-radius: 50%;
+            background-image: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 60%);
+            transform: translate(-50%, -50%);
+            animation: pulse 8s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
         }
 
         .card {
-            border: 1px solid rgba(255,255,255,0.5);
+            border: 1px solid var(--card-border);
             border-radius: var(--border-radius);
             box-shadow: var(--shadow-md);
-            background-color: var(--card-bg-light);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            background-color: var(--card-bg);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
             margin-bottom: 1.5rem;
-        }
-
-        [data-bs-theme="dark"] .card {
-            background-color: var(--card-bg-dark);
-            border-color: var(--border-dark);
         }
         
         .card:hover {
-            transform: translateY(-2px);
+            transform: translateY(-3px);
             box-shadow: var(--shadow-lg);
         }
 
         .card-header {
             background-color: transparent;
-            border-bottom: 1px solid var(--border-light);
-            padding: 1.5rem;
+            border-bottom: 1px solid var(--card-border);
+            padding: 1.25rem 1.5rem;
             font-weight: 600;
             font-size: 1.1rem;
             display: flex;
             align-items: center;
-        }
-
-        [data-bs-theme="dark"] .card-header {
-            border-bottom: 1px solid var(--border-dark);
         }
         
         .card-body {
@@ -299,36 +319,30 @@ app.get('/', (req, res) => {
         }
 
         .upload-area {
-            border: 2px dashed var(--primary-color);
-            background-color: rgba(79, 70, 229, 0.03);
+            border: 2px dashed var(--bs-primary);
+            background-color: rgba(var(--bs-primary-rgb), 0.05);
             border-radius: var(--border-radius);
             padding: 2rem;
             text-align: center;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             position: relative;
             overflow: hidden;
         }
 
-        [data-bs-theme="dark"] .upload-area {
-            border-color: rgba(99, 102, 241, 0.4);
-            background-color: rgba(15, 23, 42, 0.4);
-        }
-
         .upload-area:hover {
-            background-color: rgba(79, 70, 229, 0.08);
-            transform: scale(1.02);
+            background-color: rgba(var(--bs-primary-rgb), 0.1);
+            transform: scale(1.01);
+            border-style: solid;
         }
         
         .upload-area:hover .upload-icon {
-            transform: translateY(-5px);
+            transform: translateY(-5px) scale(1.1);
         }
         
         .upload-icon {
-            font-size: 3.5rem;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-size: 3rem;
+            color: var(--bs-primary);
             margin-bottom: 1rem;
             transition: transform 0.3s ease;
         }
@@ -336,10 +350,9 @@ app.get('/', (req, res) => {
         .log-frame {
             width: 100%;
             height: 500px;
-            border: none;
-            border-radius: calc(var(--border-radius) - 0.5rem);
+            border: 1px solid var(--card-border);
+            border-radius: var(--border-radius);
             background: #0f172a;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
         }
 
         .theme-toggle {
@@ -347,10 +360,9 @@ app.get('/', (req, res) => {
             top: 1.25rem;
             right: 1.25rem;
             z-index: 1000;
-            background: var(--card-bg-light);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border-light);
-            color: var(--text-light);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            color: var(--bs-body-color);
             width: 42px;
             height: 42px;
             display: flex;
@@ -360,33 +372,28 @@ app.get('/', (req, res) => {
             box-shadow: var(--shadow-sm);
         }
         
-        [data-bs-theme="dark"] .theme-toggle {
-            background: var(--card-bg-dark);
-            border-color: var(--border-dark);
-            color: var(--text-dark);
-        }
-        
         .theme-toggle:hover {
             transform: rotate(15deg) scale(1.1);
             box-shadow: var(--shadow-md);
+            color: var(--bs-primary);
         }
 
         .btn {
             transition: all 0.2s ease;
-            border-radius: 0.75rem;
+            border-radius: 0.5rem;
             font-weight: 500;
+            padding: 0.6rem 1.2rem;
         }
 
         .btn-primary {
             background: var(--primary-gradient);
             border: none;
-            padding: 0.6rem 1.5rem;
             box-shadow: var(--shadow-sm);
         }
         
         .btn-primary:hover {
-            filter: brightness(110%);
-            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+            filter: brightness(1.1);
+            box-shadow: 0 4px 12px rgba(var(--bs-primary-rgb), 0.3);
             transform: translateY(-2px);
         }
         
@@ -394,87 +401,71 @@ app.get('/', (req, res) => {
             background: var(--success-gradient);
             border: none;
         }
-        
         .btn-danger {
             background: var(--danger-gradient);
             border: none;
         }
-        
-        .btn-outline-secondary {
-            border-color: var(--border-light);
-            color: #64748b;
-        }
-        
-        [data-bs-theme="dark"] .btn-outline-secondary {
-            border-color: #334155;
-            color: #94a3b8;
-        }
-        
         .list-group {
             padding-left: 0;
             list-style: none;
         }
 
         .list-group-item {
-            background: white;
-            border: none;
-            margin-bottom: 0.75rem;
-            box-shadow: var(--shadow-sm);
-            border-radius: 0.75rem !important;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--card-border);
+            margin-bottom: 0.5rem;
+            border-radius: 0.5rem !important;
             transition: all 0.2s ease;
-        }
-
-        [data-bs-theme="dark"] .list-group-item {
-            background: rgba(255,255,255,0.03);
+            padding: 0.75rem 1.25rem;
         }
         
         .list-group-item:hover {
-            transform: translateX(4px);
-            box-shadow: var(--shadow-md);
+            border-color: var(--bs-primary);
+            background: rgba(var(--bs-primary-rgb), 0.05);
+            transform: translateX(2px);
+        }
+        
+        .list-group-item .action-buttons {
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .list-group-item:hover .action-buttons {
+            opacity: 1;
         }
 
         /* Custom Tabs */
         .nav-tabs {
-            border-bottom: none;
-            gap: 0.5rem;
-            padding: 0.35rem;
-            background: rgba(0,0,0,0.04);
-            border-radius: 1rem;
-            display: inline-flex;
-            flex-wrap: wrap;
+            border-bottom: 1px solid var(--card-border);
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
-        [data-bs-theme="dark"] .nav-tabs {
-            background: rgba(255,255,255,0.05);
+        .nav-tabs::-webkit-scrollbar {
+            display: none;
         }
         .nav-tabs .nav-link {
             border: none;
-            border-radius: 0.75rem;
-            color: var(--text-light);
+            border-bottom: 2px solid transparent;
+            border-radius: 0;
+            color: var(--bs-body-color);
+            opacity: 0.7;
             font-weight: 500;
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1rem;
             font-size: 0.9rem;
             transition: all 0.2s;
-        }
-        [data-bs-theme="dark"] .nav-tabs .nav-link {
-            color: var(--text-dark);
-            opacity: 0.7;
+            white-space: nowrap;
         }
         .nav-tabs .nav-link:hover {
-            background: rgba(255,255,255,0.5);
             opacity: 1;
-        }
-        [data-bs-theme="dark"] .nav-tabs .nav-link:hover {
-            background: rgba(255,255,255,0.1);
+            border-bottom-color: var(--card-border);
         }
         .nav-tabs .nav-link.active {
-            background: white;
-            color: var(--primary-color);
-            box-shadow: var(--shadow-sm);
+            border-bottom-color: var(--bs-primary);
+            color: var(--bs-primary);
             opacity: 1;
-        }
-        [data-bs-theme="dark"] .nav-tabs .nav-link.active {
-            background: var(--primary-color);
-            color: white;
+            font-weight: 600;
         }
 
         .folder-drop-zone {
@@ -487,8 +478,7 @@ app.get('/', (req, res) => {
         
         .folder-drop-zone.drag-over {
             border-color: var(--primary-color);
-            background-color: rgba(79, 70, 229, 0.05);
-            box-shadow: var(--shadow-md);
+            background-color: rgba(var(--bs-primary-rgb), 0.05);
         }
         
         .drop-overlay {
@@ -497,7 +487,7 @@ app.get('/', (req, res) => {
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(var(--bs-body-bg-light-rgb, 241, 245, 249), 0.9);
             display: none;
             flex-direction: column;
             justify-content: center;
@@ -508,7 +498,7 @@ app.get('/', (req, res) => {
         }
         
         [data-bs-theme="dark"] .drop-overlay {
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(var(--bs-body-bg-dark-rgb, 2, 6, 23), 0.9);
         }
         
         .folder-drop-zone.drag-over .drop-overlay {
@@ -548,17 +538,12 @@ app.get('/', (req, res) => {
         }
         
         .progress {
-            background-color: var(--border-light);
-            height: 12px !important;
-            border-radius: 6px !important;
-            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
-        }
-        [data-bs-theme="dark"] .progress {
-            background-color: var(--border-dark);
+            background-color: var(--card-border);
+            height: 8px !important;
+            border-radius: 4px !important;
         }
         .progress-bar {
             background: var(--primary-gradient);
-            box-shadow: 0 0 10px rgba(79, 70, 229, 0.5);
         }
     </style>
 </head>
@@ -574,7 +559,7 @@ app.get('/', (req, res) => {
         </div>
     </div>
 
-    <div class="container" style="margin-top: -4rem;">
+    <div class="container" style="margin-top: -4.5rem;">
         <div class="row g-4">
             <!-- Left Column: Upload & Controls -->
             <div class="col-lg-4">
@@ -586,23 +571,15 @@ app.get('/', (req, res) => {
                     <div class="card-body d-flex flex-column">
                         <form action="/upload" method="post" enctype="multipart/form-data" id="uploadForm" class="flex-grow-1 d-flex flex-column">
                             <div class="mb-3">
-                                <label for="uploadDestination" class="form-label small fw-bold text-muted text-uppercase">Destination</label>
-                                <select class="form-select" id="uploadDestination" onchange="updateUploadAction()">
-                                    <option value="/upload" selected>Download</option>
-                                    <option value="/upload-new-revised-form">New Files (Revised)</option>
-                                    <option value="/upload-old-revised-form">Old Files (Revised)</option>
-                                    <option value="/upload-html-form">HTML Files</option>
-                                </select>
+                                <label class="form-label small fw-bold text-muted text-uppercase">Destination</label>
+                                <input type="text" class="form-control-plaintext fw-bold text-primary px-2 border rounded bg-light" id="currentUploadDestination" value="Pending Files" readonly>
                             </div>
                             <div class="upload-area flex-grow-1 d-flex flex-column justify-content-center align-items-center mb-3" id="dropArea" onclick="document.getElementById('fileInput').click()">
-                                <input type="file" name="files" id="fileInput" accept=".pdf,.html" multiple style="display: none" onchange="updateFilename(this)">
+                                <input type="file" name="files" id="fileInput" accept=".pdf,.html" multiple style="display: none" onchange="handleAutoUpload(this)">
                                 <i class="bi bi-cloud-arrow-up upload-icon"></i>
                                 <h5 class="fw-bold">Drop files here</h5>
                                 <span id="filename" class="text-muted small">or click to browse</span>
                             </div>
-                            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm" id="uploadBtn">
-                                <i class="bi bi-upload me-2"></i>Upload
-                            </button>
                         </form>
                     </div>
                 </div>
@@ -618,7 +595,7 @@ app.get('/', (req, res) => {
                         </button>
                     </div>
                     <div class="card-body">
-                        <ul class="nav nav-tabs mb-4" id="queueTabs" role="tablist">
+                        <ul class="nav nav-tabs mb-3" id="queueTabs" role="tablist">
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending-pane" type="button" role="tab">Download</button>
                             </li>
@@ -641,7 +618,7 @@ app.get('/', (req, res) => {
                         
                         <div class="tab-content" id="queueTabsContent">
                             <div class="tab-pane fade show active folder-drop-zone" id="pending-pane" role="tabpanel" data-endpoint="/upload" data-name="Pending Files" style="min-height: 200px;">
-                                <div id="filesListContainer" style="max-height: 300px; overflow-y: auto;">${filesHtml}</div>
+                                <div id="filesListContainer" style="max-height: 280px; overflow-y: auto;">${filesHtml}</div>
                                 <div class="drop-overlay">
                                     <i class="bi bi-cloud-upload display-4 text-primary"></i>
                                     <h5 class="mt-2">Drop to Upload (Pending)</h5>
@@ -649,31 +626,31 @@ app.get('/', (req, res) => {
                             </div>
                             <div class="tab-pane fade folder-drop-zone" id="html-pane" role="tabpanel" data-endpoint="/upload-html-form" data-name="HTML Files" style="min-height: 200px;">
                                 <div id="htmlFilesListContainer" style="max-height: 300px; overflow-y: auto;">${htmlFilesHtml}</div>
-                                <div class="drop-overlay">
+                                <div class="drop-overlay rounded">
                                     <i class="bi bi-cloud-upload display-4 text-primary"></i>
                                     <h5 class="mt-2">Drop to Upload (HTML)</h5>
                                 </div>
                             </div>
                             <div class="tab-pane fade folder-drop-zone" id="new-revised-pane" role="tabpanel" data-endpoint="/upload-new-revised-form" data-name="New Files (Revised)" style="min-height: 200px;">
                                 <div id="newFilesRevisedListContainer" style="max-height: 300px; overflow-y: auto;">${newFilesRevisedHtml}</div>
-                                <div class="drop-overlay">
+                                <div class="drop-overlay rounded">
                                     <i class="bi bi-cloud-upload display-4 text-primary"></i>
                                     <h5 class="mt-2">Drop to Upload (New Revised)</h5>
                                 </div>
                             </div>
                             <div class="tab-pane fade folder-drop-zone" id="old-revised-pane" role="tabpanel" data-endpoint="/upload-old-revised-form" data-name="Old Files (Revised)" style="min-height: 200px;">
                                 <div id="oldFilesRevisedListContainer" style="max-height: 300px; overflow-y: auto;">${oldFilesRevisedHtml}</div>
-                                <div class="drop-overlay">
+                                <div class="drop-overlay rounded">
                                     <i class="bi bi-cloud-upload display-4 text-primary"></i>
                                     <h5 class="mt-2">Drop to Upload (Old Revised)</h5>
                                 </div>
                             </div>
                             <div class="tab-pane fade" id="processed-pane" role="tabpanel" style="min-height: 200px;">
-                                <div id="processedFilesListContainer" style="max-height: 300px; overflow-y: auto;">${processedFilesHtml}</div>
+                                <div id="processedFilesListContainer" style="max-height: 280px; overflow-y: auto;">${processedFilesHtml}</div>
                             </div>
                             <div class="tab-pane fade" id="logs-pane" role="tabpanel" style="min-height: 200px;">
                                 <div class="d-flex justify-content-end mb-2">
-                                    <a href="/download-all-logs" class="btn btn-sm btn-outline-primary me-1" title="Download All" style="--bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .75rem;">
+                                    <a href="/download-all-logs" class="btn btn-sm btn-outline-primary me-2" title="Download All" style="--bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .75rem;">
                                         <i class="bi bi-file-zip"></i>
                                     </a>
                                     <button class="btn btn-sm btn-outline-danger" onclick="deleteAllLogFiles()" title="Delete All" style="--bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .75rem;"><i class="bi bi-trash"></i></button>
@@ -682,7 +659,7 @@ app.get('/', (req, res) => {
                             </div>
                         </div>
 
-                        <hr class="my-4 opacity-10">
+                        <hr class="my-4">
 
                         <div class="row g-3 mb-3">
                             <div class="col-md-6">
@@ -715,7 +692,7 @@ app.get('/', (req, res) => {
                             </div>
                         </div>
 
-                        <div class="d-flex align-items-center justify-content-between bg-body-tertiary p-3 rounded-3 mb-3">
+                        <div class="d-flex align-items-center justify-content-between bg-light-subtle p-3 rounded-3 mb-3 border">
                             <div class="form-check form-switch m-0">
                                 <input class="form-check-input" type="checkbox" id="headlessCheckbox">
                                 <label class="form-check-label small fw-bold" for="headlessCheckbox">Headless Mode</label>
@@ -825,7 +802,55 @@ app.get('/', (req, res) => {
                 if (pendingAction) pendingAction();
                 confirmationModal.hide();
             });
+
+            // Initialize upload context based on active tab
+            updateUploadContext(document.querySelector('#queueTabs .nav-link.active'));
+
+            // Listen for tab changes to update upload destination
+            const tabEls = document.querySelectorAll('button[data-bs-toggle="tab"]');
+            tabEls.forEach(tabEl => {
+                tabEl.addEventListener('shown.bs.tab', function (event) {
+                    updateUploadContext(event.target);
+                });
+            });
         });
+
+        function updateUploadContext(activeTab) {
+            if (!activeTab) return;
+            const targetSelector = activeTab.getAttribute('data-bs-target');
+            const targetPane = document.querySelector(targetSelector);
+            const endpoint = targetPane.getAttribute('data-endpoint');
+            const name = targetPane.getAttribute('data-name');
+
+            const uploadForm = document.getElementById('uploadForm');
+            const destDisplay = document.getElementById('currentUploadDestination');
+            const dropArea = document.getElementById('dropArea');
+            const fileInput = document.getElementById('fileInput');
+
+            if (endpoint) {
+                uploadForm.action = endpoint;
+                destDisplay.value = name;
+                destDisplay.classList.remove('text-secondary');
+                destDisplay.classList.add('text-primary');
+
+                fileInput.disabled = false;
+
+                dropArea.style.opacity = '1';
+                dropArea.style.pointerEvents = 'auto';
+                dropArea.style.cursor = 'pointer';
+            } else {
+                uploadForm.action = '#';
+                destDisplay.value = 'Upload Not Available';
+                destDisplay.classList.remove('text-primary');
+                destDisplay.classList.add('text-secondary');
+
+                fileInput.disabled = true;
+
+                dropArea.style.opacity = '0.5';
+                dropArea.style.pointerEvents = 'none';
+                dropArea.style.cursor = 'default';
+            }
+        }
 
         // Handle Upload Form via AJAX for auto-refresh without reload
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
@@ -833,11 +858,12 @@ app.get('/', (req, res) => {
             if (!validateUpload(e)) return;
 
             const form = e.target;
-            const btn = document.getElementById('uploadBtn');
-            const originalText = btn.innerHTML;
-            
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading...';
+            const filenameSpan = document.getElementById('filename');
+            const dropArea = document.getElementById('dropArea');
+
+            const originalText = filenameSpan.innerHTML;
+            filenameSpan.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading...';
+            dropArea.style.pointerEvents = 'none';
 
             try {
                 const response = await fetch(form.action, {
@@ -868,20 +894,15 @@ app.get('/', (req, res) => {
                     }, 3000);
                 } else {
                     alert('Upload failed.');
+                    filenameSpan.innerHTML = originalText;
                 }
             } catch (error) {
                 alert('Error uploading: ' + error);
+                filenameSpan.innerHTML = originalText;
             } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalText;
+                dropArea.style.pointerEvents = 'auto';
             }
         });
-
-        function updateUploadAction() {
-            const select = document.getElementById('uploadDestination');
-            const form = document.getElementById('uploadForm');
-            form.action = select.value;
-        }
 
         function showConfirmation(message, action) {
             document.getElementById('confirmationMessage').innerText = message;
@@ -908,6 +929,13 @@ app.get('/', (req, res) => {
                     document.getElementById('filename').innerText = input.files.length + ' files selected';
                 }
                 document.getElementById('filename').classList.add('fw-bold', 'text-primary');
+            }
+        }
+
+        function handleAutoUpload(input) {
+            updateFilename(input);
+            if (input.files && input.files.length > 0) {
+                document.getElementById('uploadForm').requestSubmit();
             }
         }
 
@@ -966,6 +994,7 @@ app.get('/', (req, res) => {
                 }
                 fileInput.files = files;
                 updateFilename(fileInput);
+                document.getElementById('uploadForm').requestSubmit();
             }
         }
 

@@ -200,7 +200,7 @@ async function performLogin(page, isFirstRun) {
     }
 }
 
-async function sendEmail(subject, text, attachmentPath, recipients) {
+async function sendEmail(subject, text, attachmentPath, recipients, html) {
     if (!nodemailer) {
         logger.warn('Nodemailer not found. Skipping email. Install with: npm install nodemailer');
         return;
@@ -208,6 +208,7 @@ async function sendEmail(subject, text, attachmentPath, recipients) {
 
     const transporter = nodemailer.createTransport({
         service: 'gmail',
+        family: 4, // Force IPv4 to avoid ENETUNREACH on networks without IPv6
         auth: {
             user: process.env.EMAIL_USER || 'strdjrbservices@gmail.com',
             pass: process.env.EMAIL_PASS || 'ltcm rnyd bzch frxj' // Suggest using env var
@@ -226,8 +227,10 @@ async function sendEmail(subject, text, attachmentPath, recipients) {
     const mailOptions = {
         from: process.env.EMAIL_USER || 'strdjrbservices@gmail.com',
         to: recipients || process.env.EMAIL_TO || 'strdjrbservices2@gmail.com',
+        // cc: 'kedar@djrbservices.com, Kevin@djrbservices.com',
         subject: subject,
         text: text,
+        html: html,
         attachments: attachments
     };
 
