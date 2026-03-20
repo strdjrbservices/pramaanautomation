@@ -16,7 +16,9 @@ const REVISED_FILES_DIR = path.join(DOWNLOAD_DIR, 'RevisedFiles');
 const NEW_FILES_REVISED_DIR = path.join(DOWNLOAD_DIR, 'new_files_revised');
 const OLD_FILES_REVISED_DIR = path.join(DOWNLOAD_DIR, 'old_files_revised');
 const PROCESSED_FILES_DIR = path.join(DOWNLOAD_DIR, 'oldfiles');
+const ERROR_SCREENSHOTS_DIR = path.join(DOWNLOAD_DIR, 'error_screenshots');
 const LOG_FILE_PATH = path.resolve(__dirname, 'run-log.html');
+const PROCESSED_LOG_FILE_PATH = path.resolve(__dirname, 'processed_files.log');
 const PAUSE_LOCK_FILE = path.join(__dirname, 'pause.lock');
 
 let activeChildProcess = null;
@@ -29,6 +31,39 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
 if (fs.existsSync(PAUSE_LOCK_FILE)) {
     try { fs.unlinkSync(PAUSE_LOCK_FILE); } catch (e) {}
 }
+
+function cleanupOldErrorScreenshots() {
+    try {
+        if (fs.existsSync(ERROR_SCREENSHOTS_DIR)) {
+            const files = fs.readdirSync(ERROR_SCREENSHOTS_DIR);
+            const now = Date.now();
+            const sevenDaysMs = 2 * 24 * 60 * 60 * 1000;
+
+            let deletedCount = 0;
+            files.forEach(file => {
+                const filePath = path.join(ERROR_SCREENSHOTS_DIR, file);
+                try {
+                    const stats = fs.statSync(filePath);
+                    if (now - stats.mtimeMs > sevenDaysMs) {
+                        fs.unlinkSync(filePath);
+                        deletedCount++;
+                    }
+                } catch (err) {
+                    // Ignore individual file access errors
+                }
+            });
+            if (deletedCount > 0) {
+                console.log(`[Cleanup] Removed ${deletedCount} old error screenshots.`);
+            }
+        }
+    } catch (error) {
+        console.error('Error cleaning up old screenshots:', error.message);
+    }
+}
+
+// Run cleanup on startup and then every 24 hours
+cleanupOldErrorScreenshots();
+setInterval(cleanupOldErrorScreenshots, 24 * 60 * 60 * 1000);
 
 const getSanitizedFilename = (originalname) => {
     const ext = path.extname(originalname);
@@ -139,6 +174,10 @@ function generateFileListHtml(dirPath, relativePath, emptyMessage) {
                         icon = 'bi-file-earmark-pdf';
                         colorClass = 'text-danger';
                         bgClass = 'bg-danger-subtle';
+                    } else if (lowerF.endsWith('.png')) {
+                        icon = 'bi-image';
+                        colorClass = 'text-info';
+                        bgClass = 'bg-info-subtle';
                     } else if (lowerF.endsWith('.txt') || lowerF.endsWith('.log')) {
                         icon = 'bi-file-earmark-text';
                         colorClass = 'text-warning';
@@ -195,6 +234,19 @@ function getProcessedFilesHtml() {
     return generateFileListHtml(PROCESSED_FILES_DIR, 'oldfiles', 'No processed files found.');
 }
 
+function getErrorScreenshotsHtml() {
+    return generateFileListHtml(ERROR_SCREENSHOTS_DIR, 'error_screenshots', 'No error screenshots found.');
+}
+
+function getProcessedLogContent() {
+    try {
+        if (fs.existsSync(PROCESSED_LOG_FILE_PATH)) {
+            return fs.readFileSync(PROCESSED_LOG_FILE_PATH, 'utf8');
+        }
+    } catch (err) {}
+    return '';
+}
+
 app.get('/', (req, res) => {
     const filesHtml = getFilesHtml();
     const logFilesHtml = getLogFilesHtml();
@@ -202,6 +254,8 @@ app.get('/', (req, res) => {
     const oldFilesRevisedHtml = getOldFilesRevisedHtml();
     const processedFilesHtml = getProcessedFilesHtml();
     const htmlFilesHtml = getHtmlFilesHtml();
+    const errorScreenshotsHtml = getErrorScreenshotsHtml();
+    const processedLogContent = getProcessedLogContent();
 
     res.send(`
 <!DOCTYPE html>
@@ -597,7 +651,7 @@ app.get('/', (req, res) => {
                     <div class="card-body">
                         <ul class="nav nav-tabs mb-3" id="queueTabs" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending-pane" type="button" role="tab">Download</button>
+                                <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending-pane" type="button" role="tab">File Review</button>
                             </li>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="html-tab" data-bs-toggle="tab" data-bs-target="#html-pane" type="button" role="tab">HTML</button>
@@ -613,6 +667,12 @@ app.get('/', (req, res) => {
                             </li>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs-pane" type="button" role="tab">Logs</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="errors-tab" data-bs-toggle="tab" data-bs-target="#errors-pane" type="button" role="tab">Errors</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history-pane" type="button" role="tab">History</button>
                             </li>
                         </ul>
                         
@@ -656,6 +716,15 @@ app.get('/', (req, res) => {
                                     <button class="btn btn-sm btn-outline-danger" onclick="deleteAllLogFiles()" title="Delete All" style="--bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .75rem;"><i class="bi bi-trash"></i></button>
                                 </div>
                                 <div id="logFilesListContainer" style="max-height: 300px; overflow-y: auto;">${logFilesHtml}</div>
+                            </div>
+                            <div class="tab-pane fade" id="errors-pane" role="tabpanel" style="min-height: 200px;">
+                                <div id="errorScreenshotsListContainer" style="max-height: 280px; overflow-y: auto;">${errorScreenshotsHtml}</div>
+                            </div>
+                            <div class="tab-pane fade" id="history-pane" role="tabpanel" style="min-height: 200px;">
+                                <div class="d-flex justify-content-end mb-2">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="clearProcessedLog()" title="Clear History" style="--bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .75rem;"><i class="bi bi-trash"></i></button>
+                                </div>
+                                <pre id="processedLogContainer" class="small" style="max-height: 280px; overflow-y: auto; background-color: var(--bs-body-bg); border: 1px solid var(--card-border); padding: 10px; border-radius: 5px;">${processedLogContent}</pre>
                             </div>
                         </div>
 
@@ -791,6 +860,7 @@ app.get('/', (req, res) => {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/help_ui.js"></script>
 
     <script>
         let confirmationModal;
@@ -1107,6 +1177,8 @@ app.get('/', (req, res) => {
             document.getElementById('newFilesRevisedListContainer').innerHTML = data.newFilesRevisedHtml;
             document.getElementById('oldFilesRevisedListContainer').innerHTML = data.oldFilesRevisedHtml;
             document.getElementById('processedFilesListContainer').innerHTML = data.processedFilesHtml;
+            document.getElementById('errorScreenshotsListContainer').innerHTML = data.errorScreenshotsHtml;
+            document.getElementById('processedLogContainer').innerText = data.processedLogContent;
         }
 
         async function runAutomation() {
@@ -1240,6 +1312,17 @@ app.get('/', (req, res) => {
                     document.getElementById('progressText').innerText = 'Logs cleared.';
                 } catch (error) {
                     alert('Error clearing logs: ' + error);
+                }
+            });
+        }
+
+        function clearProcessedLog() {
+            showConfirmation('Are you sure you want to clear the processed log history?', async () => {
+                try {
+                    await fetch('/clear-processed-log', { method: 'POST' });
+                    refreshFileLists();
+                } catch (error) {
+                    alert('Error clearing processed log: ' + error);
                 }
             });
         }
@@ -1416,7 +1499,9 @@ app.get('/refresh-files', (req, res) => {
         logFilesHtml: getLogFilesHtml(),
         newFilesRevisedHtml: getNewFilesRevisedHtml(),
         oldFilesRevisedHtml: getOldFilesRevisedHtml(),
-        processedFilesHtml: getProcessedFilesHtml()
+        processedFilesHtml: getProcessedFilesHtml(),
+        errorScreenshotsHtml: getErrorScreenshotsHtml(),
+        processedLogContent: getProcessedLogContent()
     });
 });
 
@@ -1560,7 +1645,8 @@ app.post('/clear-downloads', (req, res) => {
             REVISED_FILES_DIR,
             NEW_FILES_REVISED_DIR,
             OLD_FILES_REVISED_DIR,
-            PROCESSED_FILES_DIR
+            PROCESSED_FILES_DIR,
+            ERROR_SCREENSHOTS_DIR
         ];
 
         dirs.forEach(dir => {
@@ -1635,6 +1721,15 @@ app.post('/rename-file', (req, res) => {
     } catch (error) {
         console.error('Rename error:', error);
         res.status(500).json({ status: 'error', message: 'An internal error occurred during rename.' });
+    }
+});
+
+app.post('/clear-processed-log', (req, res) => {
+    try {
+        fs.writeFileSync(PROCESSED_LOG_FILE_PATH, '');
+        res.json({ status: 'cleared', message: 'Processed log cleared.' });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: error.message });
     }
 });
 
@@ -1787,6 +1882,15 @@ app.get('/download-log', (req, res) => {
         res.download(LOG_FILE_PATH, `automation-log-${Date.now()}.html`);
     } else {
         res.status(404).send('Log file not found.');
+    }
+});
+
+app.get('/help_ui.js', (req, res) => {
+    const filePath = path.join(__dirname, 'help_ui.js');
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Help UI script not found');
     }
 });
 

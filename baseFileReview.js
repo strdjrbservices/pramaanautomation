@@ -169,10 +169,15 @@ async function processFileReview(browser, pdfFilePath, isFirstRun, config) {
         }
 
         try {
-            const screenshotPath = path.join(DOWNLOAD_PATH, `error_screenshot_${Date.now()}.png`);
+            const errorScreenshotsDir = path.join(DOWNLOAD_PATH, 'error_screenshots');
+            if (!fs.existsSync(errorScreenshotsDir)) {
+                fs.mkdirSync(errorScreenshotsDir, { recursive: true });
+            }
+            const screenshotPath = path.join(errorScreenshotsDir, `error_screenshot_${Date.now()}.png`);
             if (page && !page.isClosed()) {
                 await page.screenshot({ path: screenshotPath, fullPage: true });
                 attachments.push(screenshotPath);
+                logger.log(`Error screenshot saved to: ${screenshotPath}`);
             }
         } catch (screenshotError) {
             logger.error(`Failed to take error screenshot: ${screenshotError.message}`);

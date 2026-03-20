@@ -160,6 +160,40 @@ const PROCESSED_FILES_LOG = path.join(__dirname, 'processed_files.log');
                                 }
                                 logger.log(`Moved processed HTML file to: ${oldFilesDir}`);
                             }
+
+                            const newFilesDir = path.join(DOWNLOAD_PATH, 'new_files_revised');
+                            let revisedPdfPath = path.join(newFilesDir, pdfFile);
+
+                            if (!fs.existsSync(revisedPdfPath)) {
+                                const ext = path.extname(pdfFile);
+                                const baseName = path.basename(pdfFile, ext);
+                                const candidates = [
+                                    `${baseName}_revised${ext}`,
+                                    `${baseName} Revised${ext}`,
+                                    `${baseName}_Revised${ext}`
+                                ];
+
+                                for (const candidate of candidates) {
+                                    const candidatePath = path.join(newFilesDir, candidate);
+                                    if (fs.existsSync(candidatePath)) {
+                                        revisedPdfPath = candidatePath;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (fs.existsSync(revisedPdfPath)) {
+                                const revisedFileName = path.basename(revisedPdfPath);
+                                const revisedDestPath = path.join(oldFilesDir, revisedFileName);
+                                
+                                if (fs.existsSync(revisedDestPath)) {
+                                    const uniqueName = `${path.basename(revisedFileName, '.pdf')}_${Date.now()}.pdf`;
+                                    fs.renameSync(revisedPdfPath, path.join(oldFilesDir, uniqueName));
+                                } else {
+                                    fs.renameSync(revisedPdfPath, revisedDestPath);
+                                }
+                                logger.log(`Moved processed Revised file to: ${oldFilesDir}`);
+                            }
                         }
                         logProcessedFile(pdfFile);
                     } catch (fileError) {
